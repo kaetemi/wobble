@@ -1,0 +1,11 @@
+{
+  "name": "wobble_server",
+  "version": "1.0.0",
+  "description": "",
+  "author": "Jan BOON (Kaetemi) <kaetemi@gmail.com>",
+  "main": "index.js",
+  "dependencies": {
+    "ws": "^7.2.1"
+  },
+  "devDependencies": {}
+}
