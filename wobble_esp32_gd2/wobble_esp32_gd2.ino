@@ -8,6 +8,17 @@
 // https://github.com/arduino-libraries/NTPClient
 // https://github.com/yoursunny/PriUint64/
 
+// References:
+// http://shawnhymel.com/1675/arduino-websocket-server-using-an-esp32/
+// https://techtutorialsx.com/2018/10/19/esp32-esp8266-arduino-protocol-buffers/
+// https://www.dfrobot.com/blog-1161.html
+// https://www.dfrobot.com/blog-1177.html
+// https://randomnerdtutorials.com/esp32-ntp-client-date-time-arduino-ide/
+// https://in.uninett.no/ntp-clock-synch-accuracy-its-time-for-microseconds/
+// https://lastminuteengineers.com/handling-esp32-gpio-interrupts-tutorial/
+// https://esp32.com/viewtopic.php?t=9289
+// https://www.circuito.io/app?components=513,360217,1671987
+
 #include <esp32-hal-cpu.h>
 #include <Arduino.h>
 #include <Udp.h>
@@ -20,6 +31,7 @@
 #include <NTPClient.h>
 #undef private
 #include <WebSocketsClient.h>
+#include "wobble_protocol.pb.h"
 
 #include "wifi_setup.h"
 
@@ -46,6 +58,12 @@ bool webSocketProblem = false;
 bool webSocketConnected = false;
 bool webSocketConnecting = false;
 int32_t safeTimeout = 10;
+
+union {
+  OpenStream openStream;
+  CloseStream closeStream;
+  WriteFrame writeFrame;
+} messages;
 
 void setup() {
   Serial.begin(115200);
