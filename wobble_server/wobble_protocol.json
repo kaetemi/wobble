@@ -1,8 +1,8 @@
 {
   "nested": {
-    "MessageTypes": {
+    "MessageType": {
       "values": {
-        "UNDEFINED": 0,
+        "UNDEFINED_MESSAGE": 0,
         "OPEN_STREAM": 1,
         "WRITE_FRAME": 2,
         "CLOSE_STREAM": 3,
@@ -14,10 +14,26 @@
         "QUERY_FRAMES": 10
       }
     },
+    "SensorType": {
+      "values": {
+        "UNDEFINED_SENSOR": 0,
+        "ACCELEROMETER": 1,
+        "TEMPERATURE": 2,
+        "HUMIDITY": 3
+      }
+    },
+    "Unit": {
+      "values": {
+        "UNDEFINED_UNIT": 0,
+        "G": 1,
+        "CELSIUS": 2,
+        "RELATIVE_HUMIDITY": 3
+      }
+    },
     "UndefinedMessage": {
       "fields": {
         "messageType": {
-          "type": "MessageTypes",
+          "type": "MessageType",
           "id": 1
         }
       }
@@ -51,6 +67,25 @@
           "type": "int32",
           "id": 22
         },
+        "sensor": {
+          "type": "SensorType",
+          "id": 25
+        },
+        "hardware": {
+          "type": "string",
+          "id": 26,
+          "options": {
+            "(nanopb).max_size": 64
+          }
+        },
+        "unit": {
+          "type": "Unit",
+          "id": 27
+        },
+        "scale": {
+          "type": "float",
+          "id": 28
+        },
         "latitude": {
           "type": "double",
           "id": 23
@@ -80,7 +115,7 @@
     "OpenStream": {
       "fields": {
         "messageType": {
-          "type": "MessageTypes",
+          "type": "MessageType",
           "id": 1
         },
         "info": {
@@ -115,7 +150,7 @@
     "WriteFrame": {
       "fields": {
         "messageType": {
-          "type": "MessageTypes",
+          "type": "MessageType",
           "id": 1
         },
         "alias": {
@@ -135,7 +170,7 @@
     "CloseStream": {
       "fields": {
         "messageType": {
-          "type": "MessageTypes",
+          "type": "MessageType",
           "id": 1
         },
         "alias": {
@@ -147,7 +182,7 @@
     "SubscribeStreamList": {
       "fields": {
         "messageType": {
-          "type": "MessageTypes",
+          "type": "MessageType",
           "id": 1
         }
       }
@@ -155,7 +190,7 @@
     "PublishStream": {
       "fields": {
         "messageType": {
-          "type": "MessageTypes",
+          "type": "MessageType",
           "id": 1
         },
         "info": {
@@ -167,7 +202,7 @@
     "Subscribe": {
       "fields": {
         "messageType": {
-          "type": "MessageTypes",
+          "type": "MessageType",
           "id": 1
         },
         "name": {
@@ -182,7 +217,7 @@
     "Unsubscribe": {
       "fields": {
         "messageType": {
-          "type": "MessageTypes",
+          "type": "MessageType",
           "id": 1
         },
         "name": {
@@ -197,7 +232,7 @@
     "PublishFrame": {
       "fields": {
         "messageType": {
-          "type": "MessageTypes",
+          "type": "MessageType",
           "id": 1
         },
         "name": {
@@ -228,7 +263,7 @@
     "QueryFrames": {
       "fields": {
         "messageType": {
-          "type": "MessageTypes",
+          "type": "MessageType",
           "id": 1
         },
         "name": {

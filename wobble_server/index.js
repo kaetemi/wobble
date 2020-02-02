@@ -16,7 +16,7 @@ const FileWriter = require('wav').FileWriter;
 const wobbleProtocolDescriptor = require("./wobble_protocol.json");
 const wobbleProtocol = protobuf.Root.fromJSON(wobbleProtocolDescriptor);
 
-const MessageTypes = wobbleProtocol.MessageTypes;
+const MessageType = wobbleProtocol.MessageType;
 const UndefinedMessage = wobbleProtocol.lookupType("UndefinedMessage");
 const OpenStream = wobbleProtocol.lookupType("OpenStream");
 const WriteFrame = wobbleProtocol.lookupType("WriteFrame");
@@ -42,12 +42,16 @@ wss.on('connection', function connection(ws) {
     console.log("New connection!");
     streamMap[ws] = { };
 
+    let heartbeat = setInterval(function ping() {
+        ws.ping();
+    }, 30000);
+
     ws.on('message', function incoming(buffer) {
         let undefinedMessage = UndefinedMessage.decode(buffer);
         console.log('Received: ')
         console.log(undefinedMessage);
         switch (undefinedMessage.messageType) {
-        case MessageTypes.OPEN_STREAM: {
+        case MessageType.OPEN_STREAM: {
             let openStream = OpenStream.decode(buffer);
             console.log(openStream);
             let name = openStream.info.name;
@@ -61,7 +65,7 @@ wss.on('connection', function connection(ws) {
                 break;
             }
             let publishStream = {
-                messageType: MessageTypes.PUBLISH_STREAM,
+                messageType: MessageType.PUBLISH_STREAM,
                 info: openStream.info
             };
             // Create new output file
@@ -74,6 +78,12 @@ wss.on('connection', function connection(ws) {
                 bitDepth: bitDepth,
             });
             // Publish stream to subscribers
+            let oldStream = streams[name];
+            if (oldStream && oldStream.fileWriter) {
+                oldStream.fileWriter.end();
+                oldStream.fileWriter.file.end();
+                oldStream.fileWriter = null;
+            }
             let stream =  {
                 info: openStream.info,
                 publishStream: publishBuffer, // PB of info
@@ -81,7 +91,7 @@ wss.on('connection', function connection(ws) {
                 alias: openStream.alias,
                 receivedSamples: 0,
                 open: true,
-                subscribed: streams[name] && streams[name].subscribed || { }, // existing or blank
+                subscribed: oldStream && oldStream.subscribed || { }, // existing or blank
                 fileWriter: fileWriter,
                 bitDepth: ~~bitDepth, // bit depth for file writer, at least info.bits
                 byteDepth: ~~(bitDepth / 8),
@@ -94,7 +104,7 @@ wss.on('connection', function connection(ws) {
             }
             break;
         }
-        case MessageTypes.CLOSE_STREAM: {
+        case MessageType.CLOSE_STREAM: {
             let closeStream = CloseStream.decode(buffer);
             console.log(closeStream);
             let alias = writeFrame.alias;
@@ -105,13 +115,16 @@ wss.on('connection', function connection(ws) {
             }
             // Close output file
             let stream = streams[name];
-            stream.fileWriter.close();
-            stream.fileWriter = null;
+            if (stream.ws == ws) {
+                stream.fileWriter.end();
+                stream.fileWriter.file.end();
+                stream.fileWriter = null;
+            }
             // Remove alias
             delete streamMap[ws][alias];
             break;
         }
-        case MessageTypes.WRITE_FRAME: {
+        case MessageType.WRITE_FRAME: {
             let writeFrame = WriteFrame.decode(buffer);
             console.log(writeFrame);
             let alias = writeFrame.alias;
@@ -156,7 +169,7 @@ wss.on('connection', function connection(ws) {
             stream.receivedSamples += samples;
             let timestamp = stream.info.timestamp + (stream.receivedSamples / stream.info.frequency);
             let publishFrame = {
-                messageType: MessageTypes.PUBLISH_FRAME,
+                messageType: MessageType.PUBLISH_FRAME,
                 timestamp: timestamp,
                 offset: offset,
                 channels: writeFrame.channels,
@@ -167,7 +180,7 @@ wss.on('connection', function connection(ws) {
             }
             break;
         }
-        case MessageTypes.SUBSCRIBE: {
+        case MessageType.SUBSCRIBE: {
             let subscribe = Subscribe.decode(buffer);
             console.log(subscibe);
             let name = subscribe.name;
@@ -178,7 +191,7 @@ wss.on('connection', function connection(ws) {
             stream.subscribed[ws] = true;
             break;
         }
-        case MessageTypes.UNSUBSCRIBE: {
+        case MessageType.UNSUBSCRIBE: {
             let unsubscribe = Unsubscribe.decode(buffer);
             console.log(unsubscibe);
             let name = unsubscibe.name;
@@ -191,7 +204,7 @@ wss.on('connection', function connection(ws) {
             }
             break;
         }
-        case MessageTypes.SUBSCRIBE_STREAM_LIST: {
+        case MessageType.SUBSCRIBE_STREAM_LIST: {
             let subscribeStreamList = SubscribeStreamList.decode(buffer);
             console.log(subscribeStreamList);
             listSubscribed[ws] = true;
@@ -203,20 +216,25 @@ wss.on('connection', function connection(ws) {
         }
     });
 
-    ws.on('disconnect', function disconnected() {
+    ws.on('close', function close() {
         // Cleanup
+        console.log("Closed connection!");
         delete streamMap[ws];
+        clearInterval(heartbeat);
         if (listSubscribed[ws]) {
             delete listSubscribed[ws];
         }
         for (let k in streams) {
+            // console.log(k);
             let stream = streams[k];
             if (stream.subscribed[ws]) {
                 delete stream.subscribed[ws];
             }
             if (stream.ws == ws) {
                 if (stream.fileWriter) {
-                    stream.fileWriter.close();
+                    console.log("End stream " + stream.info.name);
+                    stream.fileWriter.end();
+                    stream.fileWriter.file.end();
                     stream.fileWriter = null;
                 }
             }

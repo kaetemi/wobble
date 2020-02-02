@@ -388,7 +388,7 @@ void loop() {
     Serial.println("Open test stream");
     lastTestStreamTimestamp = currentTimestamp();
     messages.openStream = (OpenStream)OpenStream_init_zero;
-    messages.openStream.message_type = MessageTypes_OPEN_STREAM;
+    messages.openStream.message_type = MessageType_OPEN_STREAM;
     strcpy(messages.openStream.password, "teststreampwd");
     messages.openStream.has_info = true;
     strcpy(messages.openStream.info.name, "teststreamname");
@@ -401,6 +401,12 @@ void loop() {
     messages.openStream.info.channel_descriptions_count = 1;
     strcpy(messages.openStream.info.channel_descriptions[0], "Test Channel 0");
     messages.openStream.info.timestamp_precision = 1000000; // 1s
+    messages.openStream.info.sensor = SensorType_ACCELEROMETER;
+    strcpy(messages.openStream.info.hardware, "TestHW");
+    messages.openStream.info.unit = Unit_G;
+    messages.openStream.info.scale = 2.5f;
+    messages.openStream.info.latitude = latitude;
+    messages.openStream.info.longitude = longitude;
     pb_ostream_t stream = pb_ostream_from_buffer(buffers.any, sizeof(buffers));
     if (!pb_encode(&stream, OpenStream_fields, &messages.openStream)) {
       Serial.println("Failed to encode OpenStream");
@@ -420,6 +426,10 @@ void loop() {
   }
   if (true) { // testStreamOpen
     // ...
+    uint64_t timestamp = currentTimestamp();
+    if (lastTestStreamTimestamp - timestamp >= 100) {
+      messages.writeFrame = (WriteFrame)WriteFrame_init_zero;
+    }
   }
 
   // Clock down when we're done!

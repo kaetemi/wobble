@@ -2,8 +2,8 @@ syntax = "proto3";
 
 import "nanopb.proto";
 
-enum MessageTypes {
-    UNDEFINED = 0;
+enum MessageType {
+    UNDEFINED_MESSAGE = 0;
 
     // Messages for writing to the server
     OPEN_STREAM = 1;
@@ -22,10 +22,25 @@ enum MessageTypes {
     QUERY_FRAMES = 10;
 }
 
-// TODO: Add units and scale to the stream info
+enum SensorType {
+    UNDEFINED_SENSOR = 0;
+
+    ACCELEROMETER = 1;
+    TEMPERATURE = 2;
+    HUMIDITY = 3;
+    // COLOR = 4;
+}
+
+enum Unit {
+    UNDEFINED_UNIT = 0;
+
+    G = 1; // acceleration
+    CELSIUS = 2; // temperature
+    RELATIVE_HUMIDITY = 3;
+}
 
 message UndefinedMessage {
-    MessageTypes message_type = 1;
+    MessageType message_type = 1;
     // reserve 2 and 3 for future
 }
 
@@ -37,6 +52,11 @@ message StreamInfo {
     int32 bits = 9; // used bits
     int64 timestamp = 13; // timestamp in microseconds when the stream starts
     int32 timestamp_precision = 22; // 1000000 for precision of +-1s (NTP...)
+
+    SensorType sensor = 25;
+    string hardware = 26 [(nanopb).max_size = 64]; // chip identifier, etc.
+    Unit unit = 27;
+    float scale = 28; // scale in units over the positive bit range
     double latitude = 23;
     double longitude = 24;
 
@@ -46,7 +66,7 @@ message StreamInfo {
 
 // Open a stream for writing from a sensor
 message OpenStream {
-    MessageTypes message_type = 1;
+    MessageType message_type = 1;
     StreamInfo info = 16;
     string password = 5 [(nanopb).max_size = 64];
     int32 alias = 6; // numeric value that will be used for this stream
@@ -58,7 +78,7 @@ message ChannelData {
 
 // Write a frame to a stream
 message WriteFrame {
-    MessageTypes message_type = 1;
+    MessageType message_type = 1;
     int32 alias = 6;
     repeated ChannelData channels = 19 [(nanopb).max_count = 4];
 }
@@ -66,35 +86,35 @@ message WriteFrame {
 // Close a stream
 // You should restart a stream anytime the stream timestamp starts drifting off
 message CloseStream {
-    MessageTypes message_type = 1;
+    MessageType message_type = 1;
     int32 alias = 6;
 }
 
 // List all the streams on this server, and list future streams
 // All the streams are public
 message SubscribeStreamList {
-    MessageTypes message_type = 1;
+    MessageType message_type = 1;
 }
 
 message PublishStream {
-    MessageTypes message_type = 1;
+    MessageType message_type = 1;
     StreamInfo info = 17;
 }
 
 // Subscribe to new frames
 message Subscribe {
-    MessageTypes message_type = 1;
+    MessageType message_type = 1;
     string name = 4 [(nanopb).max_size = 64]; // internal name
 }
 
 // Unsubscribe to new frames
 message Unsubscribe {
-    MessageTypes message_type = 1;
+    MessageType message_type = 1;
     string name = 4 [(nanopb).max_size = 64]; // internal name
 }
 
 message PublishFrame {
-    MessageTypes message_type = 1;
+    MessageType message_type = 1;
     string name = 4 [(nanopb).max_size = 64]; // internal name
     int64 timestamp = 13; // timestamp for this particular frame in microseconds realtime
     int32 offset = 18; // sample offset in the current series, may reset if the source drops (like timestamp, but counting samples from 0)
@@ -102,7 +122,7 @@ message PublishFrame {
 }
 
 message QueryFrames {
-    MessageTypes message_type = 1;
+    MessageType message_type = 1;
     string name = 4 [(nanopb).max_size = 64]; // internal name
     int64 from_timestamp = 20; // must be set
     int64 to_timestamp = 21; // if 0, all the way until the latest

@@ -44,6 +44,8 @@ PB_BIND(QueryFrames, QueryFrames, AUTO)
 
 
 
+
+
 #ifndef PB_CONVERT_DOUBLE_FLOAT
 /* On some platforms (such as AVR), double is really float.
  * To be able to encode/decode double on these platforms, you need.

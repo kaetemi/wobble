@@ -14,18 +14,32 @@ extern "C" {
 #endif
 
 /* Enum definitions */
-typedef enum _MessageTypes {
-    MessageTypes_UNDEFINED = 0,
-    MessageTypes_OPEN_STREAM = 1,
-    MessageTypes_WRITE_FRAME = 2,
-    MessageTypes_CLOSE_STREAM = 3,
-    MessageTypes_SUBSCRIBE_STREAM_LIST = 4,
-    MessageTypes_PUBLISH_STREAM = 6,
-    MessageTypes_SUBSCRIBE = 7,
-    MessageTypes_UNSUBSCRIBE = 8,
-    MessageTypes_PUBLISH_FRAME = 9,
-    MessageTypes_QUERY_FRAMES = 10
-} MessageTypes;
+typedef enum _MessageType {
+    MessageType_UNDEFINED_MESSAGE = 0,
+    MessageType_OPEN_STREAM = 1,
+    MessageType_WRITE_FRAME = 2,
+    MessageType_CLOSE_STREAM = 3,
+    MessageType_SUBSCRIBE_STREAM_LIST = 4,
+    MessageType_PUBLISH_STREAM = 6,
+    MessageType_SUBSCRIBE = 7,
+    MessageType_UNSUBSCRIBE = 8,
+    MessageType_PUBLISH_FRAME = 9,
+    MessageType_QUERY_FRAMES = 10
+} MessageType;
+
+typedef enum _SensorType {
+    SensorType_UNDEFINED_SENSOR = 0,
+    SensorType_ACCELEROMETER = 1,
+    SensorType_TEMPERATURE = 2,
+    SensorType_HUMIDITY = 3
+} SensorType;
+
+typedef enum _Unit {
+    Unit_UNDEFINED_UNIT = 0,
+    Unit_G = 1,
+    Unit_CELSIUS = 2,
+    Unit_RELATIVE_HUMIDITY = 3
+} Unit;
 
 /* Struct definitions */
 typedef struct _ChannelData {
@@ -34,12 +48,12 @@ typedef struct _ChannelData {
 } ChannelData;
 
 typedef struct _CloseStream {
-    MessageTypes message_type;
+    MessageType message_type;
     int32_t alias;
 } CloseStream;
 
 typedef struct _QueryFrames {
-    MessageTypes message_type;
+    MessageType message_type;
     char name[64];
     int64_t from_timestamp;
     int64_t to_timestamp;
@@ -57,28 +71,32 @@ typedef struct _StreamInfo {
     int32_t timestamp_precision;
     double latitude;
     double longitude;
+    SensorType sensor;
+    char hardware[64];
+    Unit unit;
+    float scale;
 } StreamInfo;
 
 typedef struct _Subscribe {
-    MessageTypes message_type;
+    MessageType message_type;
     char name[64];
 } Subscribe;
 
 typedef struct _SubscribeStreamList {
-    MessageTypes message_type;
+    MessageType message_type;
 } SubscribeStreamList;
 
 typedef struct _UndefinedMessage {
-    MessageTypes message_type;
+    MessageType message_type;
 } UndefinedMessage;
 
 typedef struct _Unsubscribe {
-    MessageTypes message_type;
+    MessageType message_type;
     char name[64];
 } Unsubscribe;
 
 typedef struct _OpenStream {
-    MessageTypes message_type;
+    MessageType message_type;
     char password[64];
     int32_t alias;
     bool has_info;
@@ -86,7 +104,7 @@ typedef struct _OpenStream {
 } OpenStream;
 
 typedef struct _PublishFrame {
-    MessageTypes message_type;
+    MessageType message_type;
     char name[64];
     int64_t timestamp;
     int32_t offset;
@@ -95,13 +113,13 @@ typedef struct _PublishFrame {
 } PublishFrame;
 
 typedef struct _PublishStream {
-    MessageTypes message_type;
+    MessageType message_type;
     bool has_info;
     StreamInfo info;
 } PublishStream;
 
 typedef struct _WriteFrame {
-    MessageTypes message_type;
+    MessageType message_type;
     int32_t alias;
     pb_size_t channels_count;
     ChannelData channels[4];
@@ -109,36 +127,44 @@ typedef struct _WriteFrame {
 
 
 /* Helper constants for enums */
-#define _MessageTypes_MIN MessageTypes_UNDEFINED
-#define _MessageTypes_MAX MessageTypes_QUERY_FRAMES
-#define _MessageTypes_ARRAYSIZE ((MessageTypes)(MessageTypes_QUERY_FRAMES+1))
+#define _MessageType_MIN MessageType_UNDEFINED_MESSAGE
+#define _MessageType_MAX MessageType_QUERY_FRAMES
+#define _MessageType_ARRAYSIZE ((MessageType)(MessageType_QUERY_FRAMES+1))
+
+#define _SensorType_MIN SensorType_UNDEFINED_SENSOR
+#define _SensorType_MAX SensorType_HUMIDITY
+#define _SensorType_ARRAYSIZE ((SensorType)(SensorType_HUMIDITY+1))
+
+#define _Unit_MIN Unit_UNDEFINED_UNIT
+#define _Unit_MAX Unit_RELATIVE_HUMIDITY
+#define _Unit_ARRAYSIZE ((Unit)(Unit_RELATIVE_HUMIDITY+1))
 
 
 /* Initializer values for message structs */
-#define UndefinedMessage_init_default            {_MessageTypes_MIN}
-#define StreamInfo_init_default                  {"", 0, 0, 0, 0, "", 0, {"", "", "", ""}, 0, 0, 0}
-#define OpenStream_init_default                  {_MessageTypes_MIN, "", 0, false, StreamInfo_init_default}
+#define UndefinedMessage_init_default            {_MessageType_MIN}
+#define StreamInfo_init_default                  {"", 0, 0, 0, 0, "", 0, {"", "", "", ""}, 0, 0, 0, _SensorType_MIN, "", _Unit_MIN, 0}
+#define OpenStream_init_default                  {_MessageType_MIN, "", 0, false, StreamInfo_init_default}
 #define ChannelData_init_default                 {0, {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}}
-#define WriteFrame_init_default                  {_MessageTypes_MIN, 0, 0, {ChannelData_init_default, ChannelData_init_default, ChannelData_init_default, ChannelData_init_default}}
-#define CloseStream_init_default                 {_MessageTypes_MIN, 0}
-#define SubscribeStreamList_init_default         {_MessageTypes_MIN}
-#define PublishStream_init_default               {_MessageTypes_MIN, false, StreamInfo_init_default}
-#define Subscribe_init_default                   {_MessageTypes_MIN, ""}
-#define Unsubscribe_init_default                 {_MessageTypes_MIN, ""}
-#define PublishFrame_init_default                {_MessageTypes_MIN, "", 0, 0, 0, {ChannelData_init_default, ChannelData_init_default, ChannelData_init_default, ChannelData_init_default}}
-#define QueryFrames_init_default                 {_MessageTypes_MIN, "", 0, 0}
-#define UndefinedMessage_init_zero               {_MessageTypes_MIN}
-#define StreamInfo_init_zero                     {"", 0, 0, 0, 0, "", 0, {"", "", "", ""}, 0, 0, 0}
-#define OpenStream_init_zero                     {_MessageTypes_MIN, "", 0, false, StreamInfo_init_zero}
+#define WriteFrame_init_default                  {_MessageType_MIN, 0, 0, {ChannelData_init_default, ChannelData_init_default, ChannelData_init_default, ChannelData_init_default}}
+#define CloseStream_init_default                 {_MessageType_MIN, 0}
+#define SubscribeStreamList_init_default         {_MessageType_MIN}
+#define PublishStream_init_default               {_MessageType_MIN, false, StreamInfo_init_default}
+#define Subscribe_init_default                   {_MessageType_MIN, ""}
+#define Unsubscribe_init_default                 {_MessageType_MIN, ""}
+#define PublishFrame_init_default                {_MessageType_MIN, "", 0, 0, 0, {ChannelData_init_default, ChannelData_init_default, ChannelData_init_default, ChannelData_init_default}}
+#define QueryFrames_init_default                 {_MessageType_MIN, "", 0, 0}
+#define UndefinedMessage_init_zero               {_MessageType_MIN}
+#define StreamInfo_init_zero                     {"", 0, 0, 0, 0, "", 0, {"", "", "", ""}, 0, 0, 0, _SensorType_MIN, "", _Unit_MIN, 0}
+#define OpenStream_init_zero                     {_MessageType_MIN, "", 0, false, StreamInfo_init_zero}
 #define ChannelData_init_zero                    {0, {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}}
-#define WriteFrame_init_zero                     {_MessageTypes_MIN, 0, 0, {ChannelData_init_zero, ChannelData_init_zero, ChannelData_init_zero, ChannelData_init_zero}}
-#define CloseStream_init_zero                    {_MessageTypes_MIN, 0}
-#define SubscribeStreamList_init_zero            {_MessageTypes_MIN}
-#define PublishStream_init_zero                  {_MessageTypes_MIN, false, StreamInfo_init_zero}
-#define Subscribe_init_zero                      {_MessageTypes_MIN, ""}
-#define Unsubscribe_init_zero                    {_MessageTypes_MIN, ""}
-#define PublishFrame_init_zero                   {_MessageTypes_MIN, "", 0, 0, 0, {ChannelData_init_zero, ChannelData_init_zero, ChannelData_init_zero, ChannelData_init_zero}}
-#define QueryFrames_init_zero                    {_MessageTypes_MIN, "", 0, 0}
+#define WriteFrame_init_zero                     {_MessageType_MIN, 0, 0, {ChannelData_init_zero, ChannelData_init_zero, ChannelData_init_zero, ChannelData_init_zero}}
+#define CloseStream_init_zero                    {_MessageType_MIN, 0}
+#define SubscribeStreamList_init_zero            {_MessageType_MIN}
+#define PublishStream_init_zero                  {_MessageType_MIN, false, StreamInfo_init_zero}
+#define Subscribe_init_zero                      {_MessageType_MIN, ""}
+#define Unsubscribe_init_zero                    {_MessageType_MIN, ""}
+#define PublishFrame_init_zero                   {_MessageType_MIN, "", 0, 0, 0, {ChannelData_init_zero, ChannelData_init_zero, ChannelData_init_zero, ChannelData_init_zero}}
+#define QueryFrames_init_zero                    {_MessageType_MIN, "", 0, 0}
 
 /* Field tags (for use in manual encoding/decoding) */
 #define ChannelData_data_tag                     12
@@ -154,6 +180,10 @@ typedef struct _WriteFrame {
 #define StreamInfo_bits_tag                      9
 #define StreamInfo_timestamp_tag                 13
 #define StreamInfo_timestamp_precision_tag       22
+#define StreamInfo_sensor_tag                    25
+#define StreamInfo_hardware_tag                  26
+#define StreamInfo_unit_tag                      27
+#define StreamInfo_scale_tag                     28
 #define StreamInfo_latitude_tag                  23
 #define StreamInfo_longitude_tag                 24
 #define StreamInfo_description_tag               14
@@ -195,7 +225,11 @@ X(a, STATIC,   SINGULAR, STRING,   description,      14) \
 X(a, STATIC,   REPEATED, STRING,   channel_descriptions,  15) \
 X(a, STATIC,   SINGULAR, INT32,    timestamp_precision,  22) \
 X(a, STATIC,   SINGULAR, DOUBLE,   latitude,         23) \
-X(a, STATIC,   SINGULAR, DOUBLE,   longitude,        24)
+X(a, STATIC,   SINGULAR, DOUBLE,   longitude,        24) \
+X(a, STATIC,   SINGULAR, UENUM,    sensor,           25) \
+X(a, STATIC,   SINGULAR, STRING,   hardware,         26) \
+X(a, STATIC,   SINGULAR, UENUM,    unit,             27) \
+X(a, STATIC,   SINGULAR, FLOAT,    scale,            28)
 #define StreamInfo_CALLBACK NULL
 #define StreamInfo_DEFAULT NULL
 
@@ -298,13 +332,13 @@ extern const pb_msgdesc_t QueryFrames_msg;
 
 /* Maximum encoded size of messages (where known) */
 #define UndefinedMessage_size                    2
-#define StreamInfo_size                          466
-#define OpenStream_size                          548
+#define StreamInfo_size                          544
+#define OpenStream_size                          626
 #define ChannelData_size                         1536
 #define WriteFrame_size                          6173
 #define CloseStream_size                         13
 #define SubscribeStreamList_size                 2
-#define PublishStream_size                       472
+#define PublishStream_size                       550
 #define Subscribe_size                           67
 #define Unsubscribe_size                         67
 #define PublishFrame_size                        6250
