@@ -24,6 +24,9 @@ PB_BIND(WriteFrame, WriteFrame, 4)
 PB_BIND(CloseStream, CloseStream, AUTO)
 
 
+PB_BIND(SubscribeStreamList, SubscribeStreamList, AUTO)
+
+
 PB_BIND(PublishStream, PublishStream, 2)
 
 

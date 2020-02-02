@@ -6,6 +6,7 @@
         "OPEN_STREAM": 1,
         "WRITE_FRAME": 2,
         "CLOSE_STREAM": 3,
+        "SUBSCRIBE_STREAM_LIST": 4,
         "PUBLISH_STREAM": 6,
         "SUBSCRIBE": 7,
         "UNSUBSCRIBE": 8,
@@ -29,10 +30,6 @@
           "options": {
             "(nanopb).max_size": 64
           }
-        },
-        "alias": {
-          "type": "int32",
-          "id": 6
         },
         "channels": {
           "type": "int32",
@@ -96,6 +93,10 @@
           "options": {
             "(nanopb).max_size": 64
           }
+        },
+        "alias": {
+          "type": "int32",
+          "id": 6
         }
       }
     },
@@ -132,6 +133,14 @@
       }
     },
     "CloseStream": {
+      "fields": {
+        "messageType": {
+          "type": "MessageTypes",
+          "id": 1
+        }
+      }
+    },
+    "SubscribeStreamList": {
       "fields": {
         "messageType": {
           "type": "MessageTypes",

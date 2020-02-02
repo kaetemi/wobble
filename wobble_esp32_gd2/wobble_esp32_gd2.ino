@@ -76,6 +76,7 @@ int32_t safeTimeout = 10;
 
 const int testStreamAlias = 1;
 bool testStreamOpen = false;
+bool testStreamProblem = false;
 int64_t lastTestStreamTimestamp = 0;
 int32_t samplesSent = 0;
 
@@ -381,24 +382,44 @@ void loop() {
   }
 
   // Routine to submit test stream
+  // if moredata...
   if (!testStreamOpen) {
     clockUp();
     Serial.println("Open test stream");
     lastTestStreamTimestamp = currentTimestamp();
     messages.openStream = (OpenStream)OpenStream_init_zero;
+    messages.openStream.message_type = MessageTypes_OPEN_STREAM;
+    strcpy(messages.openStream.password, "teststreampwd");
+    messages.openStream.has_info = true;
+    strcpy(messages.openStream.info.name, "teststreamname");
+    messages.openStream.alias = testStreamAlias;
+    messages.openStream.info.channels = 1;
+    messages.openStream.info.frequency = 1100;
+    messages.openStream.info.bits = 13;
+    messages.openStream.info.timestamp = lastTestStreamTimestamp; // Should use the timestamp that was set when the sensor fifo was cleared
+    strcpy(messages.openStream.info.description, "Test Stream");
+    messages.openStream.info.channel_descriptions_count = 1;
+    strcpy(messages.openStream.info.channel_descriptions[0], "Test Channel 0");
+    messages.openStream.info.timestamp_precision = 1000000; // 1s
     pb_ostream_t stream = pb_ostream_from_buffer(buffers.any, sizeof(buffers));
     if (!pb_encode(&stream, OpenStream_fields, &messages.openStream)) {
       Serial.println("Failed to encode OpenStream");
       delaySafe();
       return;
     }
+    if (!webSocket.sendBIN(buffers.any, stream.bytes_written)) {
+      Serial.println("Failed to send OpenStream");
+      delaySafe();
+      return;
+    }
     testStreamOpen = true;
+    testStreamProblem = false;
     samplesSent = 0;
     // freq 11000, send 1100 samples each 100ms
     // cut stream every minute for testing purposes
   }
   if (true) { // testStreamOpen
-    
+    // ...
   }
 
   // Clock down when we're done!

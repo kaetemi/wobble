@@ -11,8 +11,8 @@ enum MessageTypes {
     CLOSE_STREAM = 3;
 
     // Messages for streaming from the server
-    // LIST_STREAMS = 4;
-    // STREAM_LIST = 5;
+    SUBSCRIBE_STREAM_LIST = 4;
+    // UNSUBSCRIBE_STREAM_LIST = 5;
     PUBLISH_STREAM = 6;
     SUBSCRIBE = 7;
     UNSUBSCRIBE = 8;
@@ -30,7 +30,6 @@ message UndefinedMessage {
 // Stream info
 message StreamInfo {
     string name = 4 [(nanopb).max_size = 64]; // internal name
-    int32 alias = 6; // numeric value that will be used for this stream
     int32 channels = 7; // 3 for accelerometer
     int32 frequency = 8; // 1100hz for example
     int32 bits = 9; // used bits
@@ -48,6 +47,7 @@ message OpenStream {
     MessageTypes message_type = 1;
     StreamInfo info = 16;
     string password = 5 [(nanopb).max_size = 64];
+    int32 alias = 6; // numeric value that will be used for this stream
 }
 
 message ChannelData {
@@ -67,19 +67,11 @@ message CloseStream {
     MessageTypes message_type = 1;
 }
 
-/*
-// List all the streams on this server
+// List all the streams on this server, and list future streams
 // All the streams are public
-message ListStreams {
+message SubscribeStreamList {
     MessageTypes message_type = 1;
 }
-
-// Response with the list of streams
-message StreamList {
-    MessageTypes message_type = 1;
-    repeated StreamInfo streams = 17;
-}
-*/
 
 message PublishStream {
     MessageTypes message_type = 1;
