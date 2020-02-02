@@ -5,6 +5,7 @@
   "author": "Jan BOON (Kaetemi) <kaetemi@gmail.com>",
   "main": "index.js",
   "dependencies": {
+    "protobufjs": "^6.8.8",
     "ws": "^7.2.1"
   },
   "devDependencies": {}

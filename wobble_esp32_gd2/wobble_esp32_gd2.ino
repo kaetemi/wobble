@@ -49,6 +49,7 @@ const unsigned long ntpRefresh = 60000;
 unsigned long ntpLast = 0;
 bool refreshNtp = false;
 bool checkDrift = false;
+bool checkSampleDrift = false;
 
 int32_t ntpCountdown = 0;
 int64_t microsOffset;
@@ -87,7 +88,7 @@ void delaySafe() {
 }
 
 void delayReset() {
-  safeTimeout = 100;
+  safeTimeout = 10;
 }
 
 void clockDown() {
@@ -153,9 +154,13 @@ void webSocketEvent(WStype_t type, uint8_t *payload, size_t length) {
   switch(type) {
     case WStype_DISCONNECTED:
       Serial.println("WStype_DISCONNECTED");
+      clockDown();
       webSocketProblem = false;
       webSocketConnected = false;
       webSocketConnecting = false;
+      if (safeTimeout < 1000) {
+        safeTimeout *= 2;
+      }
       break;
     case WStype_CONNECTED:
       Serial.println("WStype_CONNECTED");
@@ -170,6 +175,9 @@ void webSocketEvent(WStype_t type, uint8_t *payload, size_t length) {
     case WStype_ERROR:
       Serial.println("WStype_ERROR");
       webSocketProblem = true;
+      if (safeTimeout < 1000) {
+        safeTimeout *= 2;
+      }
       break;   
     case WStype_FRAGMENT_TEXT_START:
     case WStype_FRAGMENT_BIN_START:
@@ -257,10 +265,11 @@ void loop() {
     Serial.println("NTP Updated");
     refreshNtp = false;
     checkDrift = true;
+    checkSampleDrift = true;
     delayReset();
   }
   if (!timeReady) {
-    // Time is ready now
+    // Time is ready now, realign timestamp with NTP
     clockUp();
     Serial.print("Time: ");
     Serial.println(timeClient.getFormattedTime());
@@ -273,9 +282,10 @@ void loop() {
     Serial.println(PriUint64<DEC>(currentTimestamp()));
     timeReady = true;
     checkDrift = true;
+    checkSampleDrift = true;
   }
   if (checkDrift) {
-    // Kick in case of time drift
+    // Kick in case of large time drift
     clockUp();
     checkDrift = false;
     int64_t timestamp = currentTimestamp();
@@ -301,12 +311,13 @@ void loop() {
     webSocket.loop();
     if (!webSocketConnected) {
       // delaySafe();
+      delay(safeTimeout);
       Serial.print("S");
       return;
     }
     Serial.println("Web socket connected");
     webSocketConnecting = false;
-    // delayReset();
+    delayReset();
     // TODO: Flag WS stream to restart from the next timestamp here!
   }
   if (!webSocketConnected) {

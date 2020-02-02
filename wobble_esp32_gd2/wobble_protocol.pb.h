@@ -19,8 +19,7 @@ typedef enum _MessageTypes {
     MessageTypes_OPEN_STREAM = 1,
     MessageTypes_WRITE_FRAME = 2,
     MessageTypes_CLOSE_STREAM = 3,
-    MessageTypes_LIST_STREAMS = 4,
-    MessageTypes_STREAM_LIST = 5,
+    MessageTypes_PUBLISH_STREAM = 6,
     MessageTypes_SUBSCRIBE = 7,
     MessageTypes_UNSUBSCRIBE = 8,
     MessageTypes_PUBLISH_FRAME = 9,
@@ -36,10 +35,6 @@ typedef struct _ChannelData {
 typedef struct _CloseStream {
     MessageTypes message_type;
 } CloseStream;
-
-typedef struct _ListStreams {
-    MessageTypes message_type;
-} ListStreams;
 
 typedef struct _QueryFrames {
     char name[64];
@@ -58,12 +53,9 @@ typedef struct _StreamInfo {
     pb_size_t channel_descriptions_count;
     char channel_descriptions[4][64];
     int32_t timestamp_precision;
+    double latitude;
+    double longitude;
 } StreamInfo;
-
-typedef struct _StreamList {
-    MessageTypes message_type;
-    pb_callback_t streams;
-} StreamList;
 
 typedef struct _Subscribe {
     MessageTypes message_type;
@@ -94,6 +86,12 @@ typedef struct _PublishFrame {
     ChannelData channels[4];
 } PublishFrame;
 
+typedef struct _PublishStream {
+    MessageTypes message_type;
+    bool has_info;
+    StreamInfo info;
+} PublishStream;
+
 typedef struct _WriteFrame {
     MessageTypes message_type;
     int32_t alias;
@@ -110,25 +108,23 @@ typedef struct _WriteFrame {
 
 /* Initializer values for message structs */
 #define UndefinedMessage_init_default            {_MessageTypes_MIN}
-#define StreamInfo_init_default                  {"", 0, 0, 0, 0, 0, "", 0, {"", "", "", ""}, 0}
+#define StreamInfo_init_default                  {"", 0, 0, 0, 0, 0, "", 0, {"", "", "", ""}, 0, 0, 0}
 #define OpenStream_init_default                  {_MessageTypes_MIN, "", false, StreamInfo_init_default}
 #define ChannelData_init_default                 {0, {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}}
 #define WriteFrame_init_default                  {_MessageTypes_MIN, 0, 0, {ChannelData_init_default, ChannelData_init_default, ChannelData_init_default, ChannelData_init_default}}
 #define CloseStream_init_default                 {_MessageTypes_MIN}
-#define ListStreams_init_default                 {_MessageTypes_MIN}
-#define StreamList_init_default                  {_MessageTypes_MIN, {{NULL}, NULL}}
+#define PublishStream_init_default               {_MessageTypes_MIN, false, StreamInfo_init_default}
 #define Subscribe_init_default                   {_MessageTypes_MIN, ""}
 #define Unsubscribe_init_default                 {_MessageTypes_MIN, ""}
 #define PublishFrame_init_default                {_MessageTypes_MIN, 0, 0, 0, {ChannelData_init_default, ChannelData_init_default, ChannelData_init_default, ChannelData_init_default}}
 #define QueryFrames_init_default                 {"", 0, 0}
 #define UndefinedMessage_init_zero               {_MessageTypes_MIN}
-#define StreamInfo_init_zero                     {"", 0, 0, 0, 0, 0, "", 0, {"", "", "", ""}, 0}
+#define StreamInfo_init_zero                     {"", 0, 0, 0, 0, 0, "", 0, {"", "", "", ""}, 0, 0, 0}
 #define OpenStream_init_zero                     {_MessageTypes_MIN, "", false, StreamInfo_init_zero}
 #define ChannelData_init_zero                    {0, {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}}
 #define WriteFrame_init_zero                     {_MessageTypes_MIN, 0, 0, {ChannelData_init_zero, ChannelData_init_zero, ChannelData_init_zero, ChannelData_init_zero}}
 #define CloseStream_init_zero                    {_MessageTypes_MIN}
-#define ListStreams_init_zero                    {_MessageTypes_MIN}
-#define StreamList_init_zero                     {_MessageTypes_MIN, {{NULL}, NULL}}
+#define PublishStream_init_zero                  {_MessageTypes_MIN, false, StreamInfo_init_zero}
 #define Subscribe_init_zero                      {_MessageTypes_MIN, ""}
 #define Unsubscribe_init_zero                    {_MessageTypes_MIN, ""}
 #define PublishFrame_init_zero                   {_MessageTypes_MIN, 0, 0, 0, {ChannelData_init_zero, ChannelData_init_zero, ChannelData_init_zero, ChannelData_init_zero}}
@@ -137,7 +133,6 @@ typedef struct _WriteFrame {
 /* Field tags (for use in manual encoding/decoding) */
 #define ChannelData_data_tag                     12
 #define CloseStream_message_type_tag             1
-#define ListStreams_message_type_tag             1
 #define QueryFrames_name_tag                     4
 #define QueryFrames_from_timestamp_tag           20
 #define QueryFrames_to_timestamp_tag             21
@@ -148,10 +143,10 @@ typedef struct _WriteFrame {
 #define StreamInfo_bits_tag                      9
 #define StreamInfo_timestamp_tag                 13
 #define StreamInfo_timestamp_precision_tag       22
+#define StreamInfo_latitude_tag                  23
+#define StreamInfo_longitude_tag                 24
 #define StreamInfo_description_tag               14
 #define StreamInfo_channel_descriptions_tag      15
-#define StreamList_message_type_tag              1
-#define StreamList_streams_tag                   17
 #define Subscribe_message_type_tag               1
 #define Subscribe_name_tag                       4
 #define UndefinedMessage_message_type_tag        1
@@ -164,6 +159,8 @@ typedef struct _WriteFrame {
 #define PublishFrame_timestamp_tag               13
 #define PublishFrame_offset_tag                  18
 #define PublishFrame_channels_tag                19
+#define PublishStream_message_type_tag           1
+#define PublishStream_info_tag                   17
 #define WriteFrame_message_type_tag              1
 #define WriteFrame_alias_tag                     6
 #define WriteFrame_channels_tag                  19
@@ -183,7 +180,9 @@ X(a, STATIC,   SINGULAR, INT32,    bits,              9) \
 X(a, STATIC,   SINGULAR, INT64,    timestamp,        13) \
 X(a, STATIC,   SINGULAR, STRING,   description,      14) \
 X(a, STATIC,   REPEATED, STRING,   channel_descriptions,  15) \
-X(a, STATIC,   SINGULAR, INT32,    timestamp_precision,  22)
+X(a, STATIC,   SINGULAR, INT32,    timestamp_precision,  22) \
+X(a, STATIC,   SINGULAR, DOUBLE,   latitude,         23) \
+X(a, STATIC,   SINGULAR, DOUBLE,   longitude,        24)
 #define StreamInfo_CALLBACK NULL
 #define StreamInfo_DEFAULT NULL
 
@@ -213,17 +212,12 @@ X(a, STATIC,   SINGULAR, UENUM,    message_type,      1)
 #define CloseStream_CALLBACK NULL
 #define CloseStream_DEFAULT NULL
 
-#define ListStreams_FIELDLIST(X, a) \
-X(a, STATIC,   SINGULAR, UENUM,    message_type,      1)
-#define ListStreams_CALLBACK NULL
-#define ListStreams_DEFAULT NULL
-
-#define StreamList_FIELDLIST(X, a) \
+#define PublishStream_FIELDLIST(X, a) \
 X(a, STATIC,   SINGULAR, UENUM,    message_type,      1) \
-X(a, CALLBACK, REPEATED, MESSAGE,  streams,          17)
-#define StreamList_CALLBACK pb_default_field_callback
-#define StreamList_DEFAULT NULL
-#define StreamList_streams_MSGTYPE StreamInfo
+X(a, STATIC,   OPTIONAL, MESSAGE,  info,             17)
+#define PublishStream_CALLBACK NULL
+#define PublishStream_DEFAULT NULL
+#define PublishStream_info_MSGTYPE StreamInfo
 
 #define Subscribe_FIELDLIST(X, a) \
 X(a, STATIC,   SINGULAR, UENUM,    message_type,      1) \
@@ -259,8 +253,7 @@ extern const pb_msgdesc_t OpenStream_msg;
 extern const pb_msgdesc_t ChannelData_msg;
 extern const pb_msgdesc_t WriteFrame_msg;
 extern const pb_msgdesc_t CloseStream_msg;
-extern const pb_msgdesc_t ListStreams_msg;
-extern const pb_msgdesc_t StreamList_msg;
+extern const pb_msgdesc_t PublishStream_msg;
 extern const pb_msgdesc_t Subscribe_msg;
 extern const pb_msgdesc_t Unsubscribe_msg;
 extern const pb_msgdesc_t PublishFrame_msg;
@@ -273,8 +266,7 @@ extern const pb_msgdesc_t QueryFrames_msg;
 #define ChannelData_fields &ChannelData_msg
 #define WriteFrame_fields &WriteFrame_msg
 #define CloseStream_fields &CloseStream_msg
-#define ListStreams_fields &ListStreams_msg
-#define StreamList_fields &StreamList_msg
+#define PublishStream_fields &PublishStream_msg
 #define Subscribe_fields &Subscribe_msg
 #define Unsubscribe_fields &Unsubscribe_msg
 #define PublishFrame_fields &PublishFrame_msg
@@ -282,13 +274,12 @@ extern const pb_msgdesc_t QueryFrames_msg;
 
 /* Maximum encoded size of messages (where known) */
 #define UndefinedMessage_size                    2
-#define StreamInfo_size                          457
-#define OpenStream_size                          528
+#define StreamInfo_size                          477
+#define OpenStream_size                          548
 #define ChannelData_size                         1536
 #define WriteFrame_size                          6173
 #define CloseStream_size                         2
-#define ListStreams_size                         2
-/* StreamList_size depends on runtime parameters */
+#define PublishStream_size                       483
 #define Subscribe_size                           67
 #define Unsubscribe_size                         67
 #define PublishFrame_size                        6185

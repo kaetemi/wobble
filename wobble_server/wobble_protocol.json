@@ -1,0 +1,228 @@
+{
+  "nested": {
+    "MessageTypes": {
+      "values": {
+        "UNDEFINED": 0,
+        "OPEN_STREAM": 1,
+        "WRITE_FRAME": 2,
+        "CLOSE_STREAM": 3,
+        "PUBLISH_STREAM": 6,
+        "SUBSCRIBE": 7,
+        "UNSUBSCRIBE": 8,
+        "PUBLISH_FRAME": 9,
+        "QUERY_FRAMES": 10
+      }
+    },
+    "UndefinedMessage": {
+      "fields": {
+        "messageType": {
+          "type": "MessageTypes",
+          "id": 1
+        }
+      }
+    },
+    "StreamInfo": {
+      "fields": {
+        "name": {
+          "type": "string",
+          "id": 4,
+          "options": {
+            "(nanopb).max_size": 64
+          }
+        },
+        "alias": {
+          "type": "int32",
+          "id": 6
+        },
+        "channels": {
+          "type": "int32",
+          "id": 7
+        },
+        "frequency": {
+          "type": "int32",
+          "id": 8
+        },
+        "bits": {
+          "type": "int32",
+          "id": 9
+        },
+        "timestamp": {
+          "type": "int64",
+          "id": 13
+        },
+        "timestampPrecision": {
+          "type": "int32",
+          "id": 22
+        },
+        "latitude": {
+          "type": "double",
+          "id": 23
+        },
+        "longitude": {
+          "type": "double",
+          "id": 24
+        },
+        "description": {
+          "type": "string",
+          "id": 14,
+          "options": {
+            "(nanopb).max_size": 64
+          }
+        },
+        "channelDescriptions": {
+          "rule": "repeated",
+          "type": "string",
+          "id": 15,
+          "options": {
+            "(nanopb).max_size": 64,
+            "(nanopb).max_count": 4
+          }
+        }
+      }
+    },
+    "OpenStream": {
+      "fields": {
+        "messageType": {
+          "type": "MessageTypes",
+          "id": 1
+        },
+        "info": {
+          "type": "StreamInfo",
+          "id": 16
+        },
+        "password": {
+          "type": "string",
+          "id": 5,
+          "options": {
+            "(nanopb).max_size": 64
+          }
+        }
+      }
+    },
+    "ChannelData": {
+      "fields": {
+        "data": {
+          "rule": "repeated",
+          "type": "uint32",
+          "id": 12,
+          "options": {
+            "(nanopb).max_count": 256
+          }
+        }
+      }
+    },
+    "WriteFrame": {
+      "fields": {
+        "messageType": {
+          "type": "MessageTypes",
+          "id": 1
+        },
+        "alias": {
+          "type": "int32",
+          "id": 6
+        },
+        "channels": {
+          "rule": "repeated",
+          "type": "ChannelData",
+          "id": 19,
+          "options": {
+            "(nanopb).max_count": 4
+          }
+        }
+      }
+    },
+    "CloseStream": {
+      "fields": {
+        "messageType": {
+          "type": "MessageTypes",
+          "id": 1
+        }
+      }
+    },
+    "PublishStream": {
+      "fields": {
+        "messageType": {
+          "type": "MessageTypes",
+          "id": 1
+        },
+        "info": {
+          "type": "StreamInfo",
+          "id": 17
+        }
+      }
+    },
+    "Subscribe": {
+      "fields": {
+        "messageType": {
+          "type": "MessageTypes",
+          "id": 1
+        },
+        "name": {
+          "type": "string",
+          "id": 4,
+          "options": {
+            "(nanopb).max_size": 64
+          }
+        }
+      }
+    },
+    "Unsubscribe": {
+      "fields": {
+        "messageType": {
+          "type": "MessageTypes",
+          "id": 1
+        },
+        "name": {
+          "type": "string",
+          "id": 4,
+          "options": {
+            "(nanopb).max_size": 64
+          }
+        }
+      }
+    },
+    "PublishFrame": {
+      "fields": {
+        "messageType": {
+          "type": "MessageTypes",
+          "id": 1
+        },
+        "timestamp": {
+          "type": "int64",
+          "id": 13
+        },
+        "offset": {
+          "type": "int32",
+          "id": 18
+        },
+        "channels": {
+          "rule": "repeated",
+          "type": "ChannelData",
+          "id": 19,
+          "options": {
+            "(nanopb).max_count": 4
+          }
+        }
+      }
+    },
+    "QueryFrames": {
+      "fields": {
+        "name": {
+          "type": "string",
+          "id": 4,
+          "options": {
+            "(nanopb).max_size": 64
+          }
+        },
+        "fromTimestamp": {
+          "type": "int64",
+          "id": 20
+        },
+        "toTimestamp": {
+          "type": "int64",
+          "id": 21
+        }
+      }
+    }
+  }
+}

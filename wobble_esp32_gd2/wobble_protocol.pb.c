@@ -24,10 +24,7 @@ PB_BIND(WriteFrame, WriteFrame, 4)
 PB_BIND(CloseStream, CloseStream, AUTO)
 
 
-PB_BIND(ListStreams, ListStreams, AUTO)
-
-
-PB_BIND(StreamList, StreamList, AUTO)
+PB_BIND(PublishStream, PublishStream, 2)
 
 
 PB_BIND(Subscribe, Subscribe, AUTO)
@@ -43,4 +40,12 @@ PB_BIND(QueryFrames, QueryFrames, AUTO)
 
 
 
+
+#ifndef PB_CONVERT_DOUBLE_FLOAT
+/* On some platforms (such as AVR), double is really float.
+ * To be able to encode/decode double on these platforms, you need.
+ * to define PB_CONVERT_DOUBLE_FLOAT in pb.h or compiler command line.
+ */
+PB_STATIC_ASSERT(sizeof(double) == 8, DOUBLE_MUST_BE_8_BYTES)
+#endif
 

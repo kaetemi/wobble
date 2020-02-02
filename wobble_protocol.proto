@@ -11,18 +11,20 @@ enum MessageTypes {
     CLOSE_STREAM = 3;
 
     // Messages for streaming from the server
-    LIST_STREAMS = 4;
-    STREAM_LIST = 5;
-    SUBSCRIBE = 6;
-    UNSUBSCRIBE = 7;
-    PUBLISH_FRAME = 8;
+    // LIST_STREAMS = 4;
+    // STREAM_LIST = 5;
+    PUBLISH_STREAM = 6;
+    SUBSCRIBE = 7;
+    UNSUBSCRIBE = 8;
+    PUBLISH_FRAME = 9;
 
     // Messages for querying older frames from the server
-    QUERY_FRAMES = 9;
+    QUERY_FRAMES = 10;
 }
 
 message UndefinedMessage {
     MessageTypes message_type = 1;
+    // reserve 2 and 3 for future
 }
 
 // Stream info
@@ -34,6 +36,8 @@ message StreamInfo {
     int32 bits = 9; // used bits
     int64 timestamp = 13; // timestamp in microseconds when the stream starts
     int32 timestamp_precision = 22; // 1000000 for precision of +-1s (NTP...)
+    double latitude = 23;
+    double longitude = 24;
 
     string description = 14 [(nanopb).max_size = 64]; // display name
     repeated string channel_descriptions = 15 [(nanopb).max_size = 64, (nanopb).max_count = 4]; // but count must match channels value
@@ -63,6 +67,7 @@ message CloseStream {
     MessageTypes message_type = 1;
 }
 
+/*
 // List all the streams on this server
 // All the streams are public
 message ListStreams {
@@ -73,6 +78,12 @@ message ListStreams {
 message StreamList {
     MessageTypes message_type = 1;
     repeated StreamInfo streams = 17;
+}
+*/
+
+message PublishStream {
+    MessageTypes message_type = 1;
+    StreamInfo info = 17;
 }
 
 // Subscribe to new frames
