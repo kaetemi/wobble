@@ -35,9 +35,11 @@ typedef struct _ChannelData {
 
 typedef struct _CloseStream {
     MessageTypes message_type;
+    int32_t alias;
 } CloseStream;
 
 typedef struct _QueryFrames {
+    MessageTypes message_type;
     char name[64];
     int64_t from_timestamp;
     int64_t to_timestamp;
@@ -85,6 +87,7 @@ typedef struct _OpenStream {
 
 typedef struct _PublishFrame {
     MessageTypes message_type;
+    char name[64];
     int64_t timestamp;
     int32_t offset;
     pb_size_t channels_count;
@@ -117,29 +120,31 @@ typedef struct _WriteFrame {
 #define OpenStream_init_default                  {_MessageTypes_MIN, "", 0, false, StreamInfo_init_default}
 #define ChannelData_init_default                 {0, {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}}
 #define WriteFrame_init_default                  {_MessageTypes_MIN, 0, 0, {ChannelData_init_default, ChannelData_init_default, ChannelData_init_default, ChannelData_init_default}}
-#define CloseStream_init_default                 {_MessageTypes_MIN}
+#define CloseStream_init_default                 {_MessageTypes_MIN, 0}
 #define SubscribeStreamList_init_default         {_MessageTypes_MIN}
 #define PublishStream_init_default               {_MessageTypes_MIN, false, StreamInfo_init_default}
 #define Subscribe_init_default                   {_MessageTypes_MIN, ""}
 #define Unsubscribe_init_default                 {_MessageTypes_MIN, ""}
-#define PublishFrame_init_default                {_MessageTypes_MIN, 0, 0, 0, {ChannelData_init_default, ChannelData_init_default, ChannelData_init_default, ChannelData_init_default}}
-#define QueryFrames_init_default                 {"", 0, 0}
+#define PublishFrame_init_default                {_MessageTypes_MIN, "", 0, 0, 0, {ChannelData_init_default, ChannelData_init_default, ChannelData_init_default, ChannelData_init_default}}
+#define QueryFrames_init_default                 {_MessageTypes_MIN, "", 0, 0}
 #define UndefinedMessage_init_zero               {_MessageTypes_MIN}
 #define StreamInfo_init_zero                     {"", 0, 0, 0, 0, "", 0, {"", "", "", ""}, 0, 0, 0}
 #define OpenStream_init_zero                     {_MessageTypes_MIN, "", 0, false, StreamInfo_init_zero}
 #define ChannelData_init_zero                    {0, {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}}
 #define WriteFrame_init_zero                     {_MessageTypes_MIN, 0, 0, {ChannelData_init_zero, ChannelData_init_zero, ChannelData_init_zero, ChannelData_init_zero}}
-#define CloseStream_init_zero                    {_MessageTypes_MIN}
+#define CloseStream_init_zero                    {_MessageTypes_MIN, 0}
 #define SubscribeStreamList_init_zero            {_MessageTypes_MIN}
 #define PublishStream_init_zero                  {_MessageTypes_MIN, false, StreamInfo_init_zero}
 #define Subscribe_init_zero                      {_MessageTypes_MIN, ""}
 #define Unsubscribe_init_zero                    {_MessageTypes_MIN, ""}
-#define PublishFrame_init_zero                   {_MessageTypes_MIN, 0, 0, 0, {ChannelData_init_zero, ChannelData_init_zero, ChannelData_init_zero, ChannelData_init_zero}}
-#define QueryFrames_init_zero                    {"", 0, 0}
+#define PublishFrame_init_zero                   {_MessageTypes_MIN, "", 0, 0, 0, {ChannelData_init_zero, ChannelData_init_zero, ChannelData_init_zero, ChannelData_init_zero}}
+#define QueryFrames_init_zero                    {_MessageTypes_MIN, "", 0, 0}
 
 /* Field tags (for use in manual encoding/decoding) */
 #define ChannelData_data_tag                     12
 #define CloseStream_message_type_tag             1
+#define CloseStream_alias_tag                    6
+#define QueryFrames_message_type_tag             1
 #define QueryFrames_name_tag                     4
 #define QueryFrames_from_timestamp_tag           20
 #define QueryFrames_to_timestamp_tag             21
@@ -164,6 +169,7 @@ typedef struct _WriteFrame {
 #define OpenStream_password_tag                  5
 #define OpenStream_alias_tag                     6
 #define PublishFrame_message_type_tag            1
+#define PublishFrame_name_tag                    4
 #define PublishFrame_timestamp_tag               13
 #define PublishFrame_offset_tag                  18
 #define PublishFrame_channels_tag                19
@@ -216,7 +222,8 @@ X(a, STATIC,   REPEATED, MESSAGE,  channels,         19)
 #define WriteFrame_channels_MSGTYPE ChannelData
 
 #define CloseStream_FIELDLIST(X, a) \
-X(a, STATIC,   SINGULAR, UENUM,    message_type,      1)
+X(a, STATIC,   SINGULAR, UENUM,    message_type,      1) \
+X(a, STATIC,   SINGULAR, INT32,    alias,             6)
 #define CloseStream_CALLBACK NULL
 #define CloseStream_DEFAULT NULL
 
@@ -246,6 +253,7 @@ X(a, STATIC,   SINGULAR, STRING,   name,              4)
 
 #define PublishFrame_FIELDLIST(X, a) \
 X(a, STATIC,   SINGULAR, UENUM,    message_type,      1) \
+X(a, STATIC,   SINGULAR, STRING,   name,              4) \
 X(a, STATIC,   SINGULAR, INT64,    timestamp,        13) \
 X(a, STATIC,   SINGULAR, INT32,    offset,           18) \
 X(a, STATIC,   REPEATED, MESSAGE,  channels,         19)
@@ -254,6 +262,7 @@ X(a, STATIC,   REPEATED, MESSAGE,  channels,         19)
 #define PublishFrame_channels_MSGTYPE ChannelData
 
 #define QueryFrames_FIELDLIST(X, a) \
+X(a, STATIC,   SINGULAR, UENUM,    message_type,      1) \
 X(a, STATIC,   SINGULAR, STRING,   name,              4) \
 X(a, STATIC,   SINGULAR, INT64,    from_timestamp,   20) \
 X(a, STATIC,   SINGULAR, INT64,    to_timestamp,     21)
@@ -293,13 +302,13 @@ extern const pb_msgdesc_t QueryFrames_msg;
 #define OpenStream_size                          548
 #define ChannelData_size                         1536
 #define WriteFrame_size                          6173
-#define CloseStream_size                         2
+#define CloseStream_size                         13
 #define SubscribeStreamList_size                 2
 #define PublishStream_size                       472
 #define Subscribe_size                           67
 #define Unsubscribe_size                         67
-#define PublishFrame_size                        6185
-#define QueryFrames_size                         89
+#define PublishFrame_size                        6250
+#define QueryFrames_size                         91
 
 #ifdef __cplusplus
 } /* extern "C" */

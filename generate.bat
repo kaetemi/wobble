@@ -3,3 +3,4 @@ rem wsl sudo npm install -g protobufjs
 rem wsl sudo npm install -g semver
 cd wobble_server
 wsl node_modules/.bin/pbjs ../wobble_protocol.proto -o wobble_protocol.json
+cd ..

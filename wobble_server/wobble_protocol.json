@@ -137,6 +137,10 @@
         "messageType": {
           "type": "MessageTypes",
           "id": 1
+        },
+        "alias": {
+          "type": "int32",
+          "id": 6
         }
       }
     },
@@ -196,6 +200,13 @@
           "type": "MessageTypes",
           "id": 1
         },
+        "name": {
+          "type": "string",
+          "id": 4,
+          "options": {
+            "(nanopb).max_size": 64
+          }
+        },
         "timestamp": {
           "type": "int64",
           "id": 13
@@ -216,6 +227,10 @@
     },
     "QueryFrames": {
       "fields": {
+        "messageType": {
+          "type": "MessageTypes",
+          "id": 1
+        },
         "name": {
           "type": "string",
           "id": 4,
