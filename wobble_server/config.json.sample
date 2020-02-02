@@ -1,0 +1,11 @@
+{
+    "accessRights": {
+        "teststreamname": {
+            "password": "teststreampwd"
+        }
+    },
+    "mirrorFrom": [
+        "wss://wobble.kaetemi.be"
+    ],
+    "storage": "./"
+}

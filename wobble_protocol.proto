@@ -22,6 +22,8 @@ enum MessageTypes {
     QUERY_FRAMES = 10;
 }
 
+// TODO: Add units and scale to the stream info
+
 message UndefinedMessage {
     MessageTypes message_type = 1;
     // reserve 2 and 3 for future

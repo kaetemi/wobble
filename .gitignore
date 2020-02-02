@@ -2,3 +2,5 @@
 /wobble_server/package-lock.json
 /wobble_server/node_modules
 /wobble_server/access_rights.json
+/wobble_server/config.json
+/wobble_server/*.wav

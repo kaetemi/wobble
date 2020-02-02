@@ -6,6 +6,7 @@
   "main": "index.js",
   "dependencies": {
     "protobufjs": "^6.8.8",
+    "wav": "^1.0.2",
     "ws": "^7.2.1"
   },
   "devDependencies": {}
