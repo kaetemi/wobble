@@ -3,12 +3,17 @@
  * Wobble.
  */
 
+// Boards Manager URLs:
+// https://dl.espressif.com/dl/package_esp32_index.json (esp32)
+// https://arduino.esp8266.com/stable/package_esp8266com_index.json (esp8266)
+
 // Dependencies:
 // https://github.com/Links2004/arduinoWebSockets
 // https://github.com/arduino-libraries/NTPClient
 // https://github.com/yoursunny/PriUint64/
 
 // References:
+// https://www.instructables.com/id/Wemos-ESP8266-Getting-Started-Guide-Wemos-101/
 // http://shawnhymel.com/1675/arduino-websocket-server-using-an-esp32/
 // https://techtutorialsx.com/2018/10/19/esp32-esp8266-arduino-protocol-buffers/
 // https://www.dfrobot.com/blog-1161.html
@@ -19,20 +24,29 @@
 // https://esp32.com/viewtopic.php?t=9289
 // https://www.circuito.io/app?components=513,360217,1671987
 
+#ifdef ESP32
 #include <esp32-hal-cpu.h>
+#endif
 #include <Arduino.h>
 #include <Udp.h>
 #include <PriUint64.h>
 
+#ifdef ESP8266
+#include <ESP8266WiFi.h>
+#else
 #include <WiFi.h>
+#endif
 #include <WiFiUDP.h>
 
 #define private public
 #include <NTPClient.h>
 #undef private
 #include <WebSocketsClient.h>
-#include "wobble_protocol.pb.h"
+#include <pb_common.h>
+#include <pb.h>
+#include <pb_encode.h>
 
+#include "wobble_protocol.pb.h"
 #include "wifi_setup.h"
 
 bool clockedUp = false;
@@ -45,14 +59,14 @@ NTPClient timeClient(ntpUDP); // ntpUDP, "europe.pool.ntp.org", 3600, 60000
 
 WebSocketsClient webSocket;
 
-const unsigned long ntpRefresh = 60000;
+const unsigned long ntpRefresh = 4 * 60000;
 unsigned long ntpLast = 0;
 bool refreshNtp = false;
 bool checkDrift = false;
 bool checkSampleDrift = false;
 
 int32_t ntpCountdown = 0;
-int64_t microsOffset;
+unsigned long microsLast;
 int64_t ntpOffset;
 
 bool webSocketProblem = false;
@@ -60,11 +74,23 @@ bool webSocketConnected = false;
 bool webSocketConnecting = false;
 int32_t safeTimeout = 10;
 
+const int testStreamAlias = 1;
+bool testStreamOpen = false;
+int64_t lastTestStreamTimestamp = 0;
+int32_t samplesSent = 0;
+
 union {
   OpenStream openStream;
   CloseStream closeStream;
   WriteFrame writeFrame;
 } messages;
+
+union {
+  uint8_t any[1];
+  uint8_t openStream[OpenStream_size];
+  uint8_t closeStream[CloseStream_size];
+  uint8_t writeFrame[WriteFrame_size];
+} buffers;
 
 void setup() {
   Serial.begin(115200);
@@ -73,16 +99,18 @@ void setup() {
   Serial.println();
   Serial.println();
   Serial.println("Wobble!");
+#ifdef ESP32
   Serial.print("Clock: ");
   Serial.println(getCpuFrequencyMhz());
   /* if (getCpuFrequencyMhz() >= 240) {
     clockedUp = true;
   } */
+#endif
 }
 
-void delaySafe() {
+void delaySafe(int32_t maxTimeout = 1000) {
   delay(safeTimeout);
-  if (safeTimeout < 1000) {
+  if (safeTimeout < maxTimeout) {
     safeTimeout *= 2;
   }
 }
@@ -92,27 +120,33 @@ void delayReset() {
 }
 
 void clockDown() {
+#ifdef ESP32
   if (clockedUp) {
     setCpuFrequencyMhz(80); // 80, 160, 240
     clockedUp = false;
     Serial.print("Clock: ");
     Serial.println(getCpuFrequencyMhz());
   }
+#endif
 }
 
 void clockUp() {
+#ifdef ESP32
   if (!clockedUp) { // Throttling between 80 and 240 seems to drop the WiFi more frequently
     setCpuFrequencyMhz(160); // 80, 160, 240
     clockedUp = true;
     Serial.print("Clock: ");
     Serial.println(getCpuFrequencyMhz());
   }
+#endif
 }
 
 int64_t currentTimestamp() {
-  const int64_t currentMicros = micros();
-  const int64_t deltaMicros = currentMicros - microsOffset;
-  return deltaMicros + ntpOffset;
+  const unsigned long currentMicros = micros();
+  const unsigned long deltaMicros = currentMicros - microsLast;
+  ntpOffset += deltaMicros;
+  microsLast = currentMicros;
+  return ntpOffset;
 }
 
 int64_t getEpochTimeMillis() {
@@ -163,6 +197,7 @@ void webSocketEvent(WStype_t type, uint8_t *payload, size_t length) {
       }
       break;
     case WStype_CONNECTED:
+      Serial.println();
       Serial.println("WStype_CONNECTED");
       webSocketConnected = true;
       break;
@@ -220,7 +255,9 @@ void loop() {
       timeClient.end();
       timeConnected = false;
     }
-    WiFi.begin(ssid, password);
+    char ssidc[128];
+    strcpy(ssidc, ssid);
+    WiFi.begin(ssidc, password);
     connectingWiFi = true;
     return;
   }
@@ -245,7 +282,7 @@ void loop() {
     timeReady = false;
     refreshNtp = true;
   }
-  long ntpPassed = millis() - ntpLast;
+  unsigned long ntpPassed = millis() - ntpLast;
   if (refreshNtp || ntpPassed >= ntpRefresh) {
     // Refresh NTP
     clockUp();
@@ -275,9 +312,9 @@ void loop() {
     Serial.println(timeClient.getFormattedTime());
     Serial.print("Epoch: ");
     Serial.println(timeClient.getEpochTime());
-    microsOffset = micros();
+    microsLast = micros();
     ntpOffset = getEpochTimeMillis() * 1000;
-    microsOffset = (microsOffset + (int64_t)micros()) >> 1; // Average before and after
+    microsLast = (microsLast + (int64_t)micros()) >> 1; // Average before and after
     Serial.print("Timestamp: ");
     Serial.println(PriUint64<DEC>(currentTimestamp()));
     timeReady = true;
@@ -322,6 +359,10 @@ void loop() {
   }
   if (!webSocketConnected) {
     clockUp();
+    if (testStreamOpen) {
+      // Close test stream
+      testStreamOpen = false;
+    }
     webSocket.begin(serverAddress, serverPort, "/", "wobble1");
     webSocket.onEvent(webSocketEvent);
     webSocketConnecting = true;
@@ -339,7 +380,30 @@ void loop() {
     return;
   }
 
+  // Routine to submit test stream
+  if (!testStreamOpen) {
+    clockUp();
+    Serial.println("Open test stream");
+    lastTestStreamTimestamp = currentTimestamp();
+    messages.openStream = (OpenStream)OpenStream_init_zero;
+    pb_ostream_t stream = pb_ostream_from_buffer(buffers.any, sizeof(buffers));
+    if (!pb_encode(&stream, OpenStream_fields, &messages.openStream)) {
+      Serial.println("Failed to encode OpenStream");
+      delaySafe();
+      return;
+    }
+    testStreamOpen = true;
+    samplesSent = 0;
+    // freq 11000, send 1100 samples each 100ms
+    // cut stream every minute for testing purposes
+  }
+  if (true) { // testStreamOpen
+    
+  }
+
   // Clock down when we're done!
   clockDown();
   delayReset();
 }
+
+/* end of file */
