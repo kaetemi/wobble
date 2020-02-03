@@ -3,6 +3,8 @@
 // Reference:
 // https://javascript.info/websocket
 // https://www.w3schools.com/jsref/met_table_insertrow.asp
+// https://www.w3schools.com/html/html5_canvas.asp
+// https://www.w3schools.com/tags/ref_canvas.asp
 
 const wobbleProtocolDescriptor = require("./wobble_protocol.json");
 const wobbleProtocol = protobuf.Root.fromJSON(wobbleProtocolDescriptor);
@@ -119,6 +121,9 @@ function publishStream(message) {
             displayRow: null,
             displayMinutes: null,
             displaySeconds: null,
+            cache: {
+                lastSample: null,
+            }
         });
     }
     // Update all rows
@@ -153,8 +158,18 @@ function displayStreamChannel(name, channel) {
     } else {
         // Subscribe
         row.displayRow = displayTable.insertRow();
-        row.displayMinutes = row.displayRow.insertCell();
-        row.displaySeconds = row.displayRow.insertCell();
+        let minutesCell = row.displayRow.insertCell();
+        let minutesCanvas = document.createElement("canvas");
+        minutesCanvas.setAttribute('width', 768);
+        minutesCanvas.setAttribute('height', 128);
+        minutesCell.appendChild(minutesCanvas);
+        row.displayMinutes = minutesCanvas;
+        let secondsCell = row.displayRow.insertCell();
+        let secondsCanvas = document.createElement("canvas");
+        secondsCanvas.setAttribute('width', 768);
+        secondsCanvas.setAttribute('height', 128);
+        secondsCell.appendChild(secondsCanvas);
+        row.displaySeconds = secondsCanvas;
         // Create canvas
         if (!stream.subs) {
             subscribe(name);
@@ -164,7 +179,7 @@ function displayStreamChannel(name, channel) {
 } displayStreamChannel;
 
 function publishFrame(message) {
-    console.log(message);
+    //console.log(message);
     if (!listTable) listTable = document.getElementById("list");
     if (!displayTable) displayTable = document.getElementById("display");
     let name = message.name;
@@ -173,10 +188,39 @@ function publishFrame(message) {
     for (let ch = 0; ch < stream.rows.length; ++ch) {
         if (rows[ch].displayRow) {
             let listRow = rows[ch].row;
-            listRow.cells[6].innerHTML = message.timestamp.toString();
             let displayMinutes = rows[ch].displayMinutes;
             let displaySeconds = rows[ch].displaySeconds;
-            // ...
+            let cache = rows[ch].cache;
+            let data = message.channels[ch].data;
+            var ctxMin = displayMinutes.getContext("2d");
+            var ctxSec = displaySeconds.getContext("2d");
+            let width = 768;
+            let height = 128;
+            if (cache.displayedSamples) {
+                // TODO: Shift image left when timestamp skips
+                // Shift image left by new samples
+                ctxSec.drawImage(displaySeconds, -data.length, 0);
+                cache.displayedSamples += data.length;
+            } else {
+                cache.displayedSamples = data.length;
+            }
+            // ctxSec.lineWidth = 0.5;
+            ctxSec.fillStyle = '#FFFFFF';
+            ctxSec.fillRect(width - data.length, 0, data.length, height);
+            ctxSec.beginPath();
+            if (cache.lastSample != null) {
+                ctxSec.moveTo(width - data.length - 1, (height / 2) + cache.lastSample * 0.001);
+            }
+            for (let i = 0; i < data.length; ++i) {
+                // TODO: Proper scaling etc
+                let x = width - data.length + i;
+                let y = (height / 2) + data[i] * 0.001;
+                if (cache.lastSample == null && i == 0) ctxSec.moveTo(x, y);
+                else ctxSec.lineTo(x, y);
+            }
+            ctxSec.stroke();
+            cache.lastSample = data[data.length - 1];
+            listRow.cells[6].innerHTML = message.timestamp.toString() + ' ' + cache.lastSample;
         }
     }
 }

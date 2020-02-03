@@ -145,7 +145,7 @@
       "fields": {
         "data": {
           "rule": "repeated",
-          "type": "uint32",
+          "type": "int32",
           "id": 12,
           "options": {
             "(nanopb).max_count": 256

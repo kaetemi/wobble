@@ -46,7 +46,7 @@ typedef enum _Unit {
 /* Struct definitions */
 typedef struct _ChannelData {
     pb_size_t data_count;
-    uint32_t data[256];
+    int32_t data[256];
 } ChannelData;
 
 typedef struct _CloseStream {
@@ -266,7 +266,7 @@ X(a, STATIC,   OPTIONAL, MESSAGE,  info,             16)
 #define OpenStream_info_MSGTYPE StreamInfo
 
 #define ChannelData_FIELDLIST(X, a) \
-X(a, STATIC,   REPEATED, UINT32,   data,             12)
+X(a, STATIC,   REPEATED, INT32,    data,             12)
 #define ChannelData_CALLBACK NULL
 #define ChannelData_DEFAULT NULL
 
@@ -373,14 +373,14 @@ extern const pb_msgdesc_t ResultDone_msg;
 #define UndefinedMessage_size                    2
 #define StreamInfo_size                          550
 #define OpenStream_size                          632
-#define ChannelData_size                         1536
-#define WriteFrame_size                          6173
+#define ChannelData_size                         2816
+#define WriteFrame_size                          11293
 #define CloseStream_size                         13
 #define SubscribeStreamList_size                 2
 #define PublishStream_size                       556
 #define Subscribe_size                           67
 #define Unsubscribe_size                         67
-#define PublishFrame_size                        6250
+#define PublishFrame_size                        11370
 #define QueryFrames_size                         91
 #define QueryCache_size                          67
 #define ResultDone_size                          67

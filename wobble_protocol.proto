@@ -77,7 +77,7 @@ message OpenStream {
 }
 
 message ChannelData {
-    repeated uint32 data = 12 [(nanopb).max_count = 256];
+    repeated int32 data = 12 [(nanopb).max_count = 256];
 }
 
 // Write a frame to a stream
