@@ -159,12 +159,14 @@ function displayStreamChannel(name, channel) {
         // Subscribe
         row.displayRow = displayTable.insertRow();
         let minutesCell = row.displayRow.insertCell();
+        minutesCell.setAttribute('bgcolor', '#E0E0E0');
         let minutesCanvas = document.createElement("canvas");
         minutesCanvas.setAttribute('width', 768);
         minutesCanvas.setAttribute('height', 128);
         minutesCell.appendChild(minutesCanvas);
         row.displayMinutes = minutesCanvas;
         let secondsCell = row.displayRow.insertCell();
+        secondsCell.setAttribute('bgcolor', '#E0E0E0');
         let secondsCanvas = document.createElement("canvas");
         secondsCanvas.setAttribute('width', 768);
         secondsCanvas.setAttribute('height', 128);

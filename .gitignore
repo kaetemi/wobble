@@ -5,3 +5,4 @@
 /wobble_server/config.json
 /wobble_server/*.wav
 /wobble_server/*.flac
+/wobble_esp8266_lis3dhh/wifi_setup.h

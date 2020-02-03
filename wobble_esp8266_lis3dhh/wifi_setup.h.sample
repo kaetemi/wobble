@@ -1,0 +1,6 @@
+
+const char *ssid          = "ssid";
+const char *password      = "password";
+
+const char *serverAddress = "wobble";
+const int serverPort      = 8090;
