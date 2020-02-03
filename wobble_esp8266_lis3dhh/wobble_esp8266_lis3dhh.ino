@@ -107,8 +107,9 @@ volatile int16_t accelRd = 0, accelWr = 0;
 volatile int16_t accelRefWr = 0;
 volatile int64_t accelRefTs = 0, accelNextTs = 0;
 volatile int accelReads = 0;
+os_timer_t accelTimer;
 
-// Called from interrupt
+// Called from ~~interrupt~~ timer
 void ICACHE_RAM_ATTR accelPushValue(int16_t x, int16_t y, int16_t z, int i) {
   if (!accelStreamOpen) return;
   if (accelStreamProblem) return;
@@ -246,6 +247,12 @@ int64_t ICACHE_RAM_ATTR currentTimestamp() {
   return ntpOffset;
 }
 
+int64_t ICACHE_RAM_ATTR currentTimestampNoAdj() {
+  const unsigned long currentMicros = micros();
+  const unsigned long deltaMicros = currentMicros - microsLast;
+  return ntpOffset + deltaMicros;
+}
+
 int64_t getEpochTimeMillis() {
   return ((int64_t)timeClient._timeOffset * 1000)
     + ((int64_t)timeClient._currentEpoc * 1000)
@@ -319,78 +326,38 @@ void webSocketEvent(WStype_t type, uint8_t *payload, size_t length) {
   }
 }
 
-void ICACHE_RAM_ATTR accelRead() {
+void ICACHE_RAM_ATTR accelRead(void *) {
+  int64_t nextTs = currentTimestamp();
   LIS3DHHStatusTypeDef res;
   lis3dhh_reg_t reg;
   reg.byte = 0;
   res = sensor->ReadReg(LIS3DHH_FIFO_SRC, &reg.byte);
   if (res != LIS3DHH_STATUS_OK) {
     accelStreamProblem = true;
+    accelNextTs = 0;
     return;
   }
   if (reg.fifo_src.ovrn) {
-    // Serial.println("FIFO Overrun");
-    // Serial.println(reg.fifo_src.fss);
-    // digitalWrite(LED_BUILTIN, LOW); // Turn on LED
+    Serial.println("FIFO Overrun");
     accelStreamProblem = true;
-    // Don't return, flush
-    // Serial.println("FIFO Overrun");
-    // Serial.println((int)(currentTimestamp() - accelNextTs));
-    //sensorChecked = false; // Reset?
-    //return;
   }
-
-/*
-  int16_t sample[3];
-  res = sensor->Get_X_AxesRaw(sample);
-  ++accelReads;
-  if (res != LIS3DHH_STATUS_OK) {
-    accelStreamProblem = true;
-    // digitalWrite(LED_BUILTIN, HIGH); // Turn off LED
-    return;
-  }
-*/
-
-  //if (reg.fifo_src.fss > 12) {
-    while (reg.fifo_src.fss) {
-      // Serial.println(reg.fifo_src.fss);
-      // digitalWrite(LED_BUILTIN, LOW); // Turn on LED
-      // While data is available, read it!
-      for (int i = 0; i < reg.fifo_src.fss; ++i) {
-        int16_t sample[3];
-        res = sensor->Get_X_AxesRaw(sample);
-        ++accelReads;
-        if (res != LIS3DHH_STATUS_OK) {
-          accelStreamProblem = true;
-          // digitalWrite(LED_BUILTIN, HIGH); // Turn off LED
-          return;
-        }
+  for (int i = 0; i < reg.fifo_src.fss; ++i) {
+      int16_t sample[3];
+      res = sensor->Get_X_AxesRaw(sample);
+      accelPushValue(sample[0], sample[1], sample[2], i);
+      if (accelReads % 1100 == 0) {
+        digitalWrite(LED_BUILTIN, LOW); // Turn on LED
+      } else if (accelReads % 1100 == 55) {
+        digitalWrite(LED_BUILTIN, HIGH); // Turn off LED
       }
-      res = sensor->ReadReg(LIS3DHH_FIFO_SRC, &reg.byte);
+      ++accelReads;
       if (res != LIS3DHH_STATUS_OK) {
         accelStreamProblem = true;
-        // digitalWrite(LED_BUILTIN, HIGH); // Turn off LED
+        accelNextTs = 0;
         return;
       }
-    }
-  //}
-
-  /*
-  if (accelStreamProblem) {
-    reg.byte = 0;
-    res = sensor->ReadReg(LIS3DHH_CTRL_REG1, &reg.byte);
-    // if (res != LIS3DHH_STATUS_OK) { Serial.println("Failed ReadReg CTRL_REG1!"); }
-    else {
-      reg.ctrl_reg1.norm_mod_en = 1;
-      res = sensor->WriteReg(LIS3DHH_CTRL_REG1, reg.byte);
-      // if (res != LIS3DHH_STATUS_OK) { Serial.println("Failed WriteReg CTRL_REG1!"); }
-    }
   }
-  */
-
-  // Timestamp for the next read batch
-  accelNextTs = currentTimestamp();
-  // digitalWrite(LED_BUILTIN, HIGH); // Turn off LED
+  accelNextTs = nextTs;
 }
 
 void loop() {
@@ -592,7 +559,7 @@ void loop() {
 
     // Set FIFO options
     reg.byte = 0;
-    reg.fifo_ctrl.fth = 24; // 12; // Threshold 12 / 32 fifo samples
+    reg.fifo_ctrl.fth = 28; // 12; // Threshold 12 / 32 fifo samples
     reg.fifo_ctrl.fmode = LIS3DHH_FIFO_MODE;
     res = sensor->WriteReg(LIS3DHH_FIFO_CTRL, reg.byte);
     if (res != LIS3DHH_STATUS_OK) { Serial.println("Failed WriteReg LIS3DHH_FIFO_CTRL!"); delaySafe(); return; }
@@ -634,7 +601,9 @@ void loop() {
     }
 
     // Attach interrupt and flush FIFO to kick it into effect
-    attachInterrupt(digitalPinToInterrupt(INT1_PIN), accelRead, RISING);
+    //attachInterrupt(digitalPinToInterrupt(INT1_PIN), accelRead, RISING);
+    os_timer_setfn(&accelTimer, accelRead, NULL);
+    os_timer_arm(&accelTimer, 4, true);
     // Interrupt with SPI not working reliably
     // Regular call not reliable either due to WiFi!
     
