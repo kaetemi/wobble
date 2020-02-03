@@ -4,3 +4,4 @@
 /wobble_server/access_rights.json
 /wobble_server/config.json
 /wobble_server/*.wav
+/wobble_server/*.flac

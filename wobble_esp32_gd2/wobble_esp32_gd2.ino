@@ -363,6 +363,7 @@ void loop() {
     if (testStreamOpen) {
       // Close test stream
       testStreamOpen = false;
+      testStreamProblem = false;
     }
     webSocket.begin(serverAddress, serverPort, "/", "wobble1");
     webSocket.onEvent(webSocketEvent);
@@ -383,6 +384,10 @@ void loop() {
 
   // Routine to submit test stream
   // if moredata...
+  if (testStreamProblem) {
+    // TODO: Close stream
+    clockUp();
+  }
   if (!testStreamOpen) {
     clockUp();
     Serial.println("Open test stream");
@@ -393,7 +398,7 @@ void loop() {
     messages.openStream.has_info = true;
     strcpy(messages.openStream.info.name, "teststreamname");
     messages.openStream.alias = testStreamAlias;
-    messages.openStream.info.channels = 1;
+    messages.openStream.info.channels = 2;
     messages.openStream.info.frequency = 1100;
     messages.openStream.info.bits = 13;
     messages.openStream.info.timestamp = lastTestStreamTimestamp; // Should use the timestamp that was set when the sensor fifo was cleared
@@ -424,12 +429,36 @@ void loop() {
     // freq 11000, send 1100 samples each 100ms
     // cut stream every minute for testing purposes
   }
-  if (true) { // testStreamOpen
-    // ...
+  if (testStreamOpen) {
     uint64_t timestamp = currentTimestamp();
-    if (lastTestStreamTimestamp - timestamp >= 100) {
+    if (lastTestStreamTimestamp - timestamp >= 100000) {
+      clockUp();
+      lastTestStreamTimestamp += 100000;
       messages.writeFrame = (WriteFrame)WriteFrame_init_zero;
+      messages.writeFrame.message_type = MessageType_WRITE_FRAME;
+      messages.writeFrame.alias = testStreamAlias;
+      messages.writeFrame.channels_count = 2;
+      messages.writeFrame.channels[0].data_count = 110;
+      messages.writeFrame.channels[1].data_count = 110;
+      for (int i = 0; i < 110; ++i) {
+        messages.writeFrame.channels[0].data[i] = i * 100;
+        messages.writeFrame.channels[1].data[i] = -i * 100;
+      }
+      pb_ostream_t stream = pb_ostream_from_buffer(buffers.any, sizeof(buffers));
+      if (!pb_encode(&stream, WriteFrame_fields, &messages.writeFrame)) {
+        Serial.println("Failed to encode WriteFrame");
+        testStreamProblem = true;
+        delaySafe();
+        return;
+      }
+      if (!webSocket.sendBIN(buffers.any, stream.bytes_written)) {
+        Serial.println("Failed to send WriteFrame");
+        testStreamProblem = true;
+        delaySafe();
+        return;
+      }
     }
+    samplesSent += 110;
   }
 
   // Clock down when we're done!

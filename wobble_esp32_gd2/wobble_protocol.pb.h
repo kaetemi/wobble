@@ -24,7 +24,9 @@ typedef enum _MessageType {
     MessageType_SUBSCRIBE = 7,
     MessageType_UNSUBSCRIBE = 8,
     MessageType_PUBLISH_FRAME = 9,
-    MessageType_QUERY_FRAMES = 10
+    MessageType_QUERY_CACHE = 11,
+    MessageType_RESULT_FRAME = 12,
+    MessageType_RESULT_DONE = 13
 } MessageType;
 
 typedef enum _SensorType {
@@ -52,12 +54,22 @@ typedef struct _CloseStream {
     int32_t alias;
 } CloseStream;
 
+typedef struct _QueryCache {
+    MessageType message_type;
+    char name[64];
+} QueryCache;
+
 typedef struct _QueryFrames {
     MessageType message_type;
     char name[64];
     int64_t from_timestamp;
     int64_t to_timestamp;
 } QueryFrames;
+
+typedef struct _ResultDone {
+    MessageType message_type;
+    char name[64];
+} ResultDone;
 
 typedef struct _StreamInfo {
     char name[64];
@@ -128,8 +140,8 @@ typedef struct _WriteFrame {
 
 /* Helper constants for enums */
 #define _MessageType_MIN MessageType_UNDEFINED_MESSAGE
-#define _MessageType_MAX MessageType_QUERY_FRAMES
-#define _MessageType_ARRAYSIZE ((MessageType)(MessageType_QUERY_FRAMES+1))
+#define _MessageType_MAX MessageType_RESULT_DONE
+#define _MessageType_ARRAYSIZE ((MessageType)(MessageType_RESULT_DONE+1))
 
 #define _SensorType_MIN SensorType_UNDEFINED_SENSOR
 #define _SensorType_MAX SensorType_HUMIDITY
@@ -153,6 +165,8 @@ typedef struct _WriteFrame {
 #define Unsubscribe_init_default                 {_MessageType_MIN, ""}
 #define PublishFrame_init_default                {_MessageType_MIN, "", 0, 0, 0, {ChannelData_init_default, ChannelData_init_default, ChannelData_init_default, ChannelData_init_default}}
 #define QueryFrames_init_default                 {_MessageType_MIN, "", 0, 0}
+#define QueryCache_init_default                  {_MessageType_MIN, ""}
+#define ResultDone_init_default                  {_MessageType_MIN, ""}
 #define UndefinedMessage_init_zero               {_MessageType_MIN}
 #define StreamInfo_init_zero                     {"", 0, 0, 0, 0, "", 0, {"", "", "", ""}, 0, 0, 0, _SensorType_MIN, "", _Unit_MIN, 0}
 #define OpenStream_init_zero                     {_MessageType_MIN, "", 0, false, StreamInfo_init_zero}
@@ -165,15 +179,21 @@ typedef struct _WriteFrame {
 #define Unsubscribe_init_zero                    {_MessageType_MIN, ""}
 #define PublishFrame_init_zero                   {_MessageType_MIN, "", 0, 0, 0, {ChannelData_init_zero, ChannelData_init_zero, ChannelData_init_zero, ChannelData_init_zero}}
 #define QueryFrames_init_zero                    {_MessageType_MIN, "", 0, 0}
+#define QueryCache_init_zero                     {_MessageType_MIN, ""}
+#define ResultDone_init_zero                     {_MessageType_MIN, ""}
 
 /* Field tags (for use in manual encoding/decoding) */
 #define ChannelData_data_tag                     12
 #define CloseStream_message_type_tag             1
 #define CloseStream_alias_tag                    6
+#define QueryCache_message_type_tag              1
+#define QueryCache_name_tag                      4
 #define QueryFrames_message_type_tag             1
 #define QueryFrames_name_tag                     4
 #define QueryFrames_from_timestamp_tag           20
 #define QueryFrames_to_timestamp_tag             21
+#define ResultDone_message_type_tag              1
+#define ResultDone_name_tag                      4
 #define StreamInfo_name_tag                      4
 #define StreamInfo_channels_tag                  7
 #define StreamInfo_frequency_tag                 8
@@ -303,6 +323,18 @@ X(a, STATIC,   SINGULAR, INT64,    to_timestamp,     21)
 #define QueryFrames_CALLBACK NULL
 #define QueryFrames_DEFAULT NULL
 
+#define QueryCache_FIELDLIST(X, a) \
+X(a, STATIC,   SINGULAR, UENUM,    message_type,      1) \
+X(a, STATIC,   SINGULAR, STRING,   name,              4)
+#define QueryCache_CALLBACK NULL
+#define QueryCache_DEFAULT NULL
+
+#define ResultDone_FIELDLIST(X, a) \
+X(a, STATIC,   SINGULAR, UENUM,    message_type,      1) \
+X(a, STATIC,   SINGULAR, STRING,   name,              4)
+#define ResultDone_CALLBACK NULL
+#define ResultDone_DEFAULT NULL
+
 extern const pb_msgdesc_t UndefinedMessage_msg;
 extern const pb_msgdesc_t StreamInfo_msg;
 extern const pb_msgdesc_t OpenStream_msg;
@@ -315,6 +347,8 @@ extern const pb_msgdesc_t Subscribe_msg;
 extern const pb_msgdesc_t Unsubscribe_msg;
 extern const pb_msgdesc_t PublishFrame_msg;
 extern const pb_msgdesc_t QueryFrames_msg;
+extern const pb_msgdesc_t QueryCache_msg;
+extern const pb_msgdesc_t ResultDone_msg;
 
 /* Defines for backwards compatibility with code written before nanopb-0.4.0 */
 #define UndefinedMessage_fields &UndefinedMessage_msg
@@ -329,6 +363,8 @@ extern const pb_msgdesc_t QueryFrames_msg;
 #define Unsubscribe_fields &Unsubscribe_msg
 #define PublishFrame_fields &PublishFrame_msg
 #define QueryFrames_fields &QueryFrames_msg
+#define QueryCache_fields &QueryCache_msg
+#define ResultDone_fields &ResultDone_msg
 
 /* Maximum encoded size of messages (where known) */
 #define UndefinedMessage_size                    2
@@ -343,6 +379,8 @@ extern const pb_msgdesc_t QueryFrames_msg;
 #define Unsubscribe_size                         67
 #define PublishFrame_size                        6250
 #define QueryFrames_size                         91
+#define QueryCache_size                          67
+#define ResultDone_size                          67
 
 #ifdef __cplusplus
 } /* extern "C" */

@@ -11,7 +11,9 @@
         "SUBSCRIBE": 7,
         "UNSUBSCRIBE": 8,
         "PUBLISH_FRAME": 9,
-        "QUERY_FRAMES": 10
+        "QUERY_CACHE": 11,
+        "RESULT_FRAME": 12,
+        "RESULT_DONE": 13
       }
     },
     "SensorType": {
@@ -280,6 +282,36 @@
         "toTimestamp": {
           "type": "int64",
           "id": 21
+        }
+      }
+    },
+    "QueryCache": {
+      "fields": {
+        "messageType": {
+          "type": "MessageType",
+          "id": 1
+        },
+        "name": {
+          "type": "string",
+          "id": 4,
+          "options": {
+            "(nanopb).max_size": 64
+          }
+        }
+      }
+    },
+    "ResultDone": {
+      "fields": {
+        "messageType": {
+          "type": "MessageType",
+          "id": 1
+        },
+        "name": {
+          "type": "string",
+          "id": 4,
+          "options": {
+            "(nanopb).max_size": 64
+          }
         }
       }
     }

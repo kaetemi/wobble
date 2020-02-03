@@ -19,7 +19,10 @@ enum MessageType {
     PUBLISH_FRAME = 9;
 
     // Messages for querying older frames from the server
-    QUERY_FRAMES = 10;
+    // QUERY_FRAMES = 10;
+    QUERY_CACHE = 11;
+    RESULT_FRAME = 12;
+    RESULT_DONE = 13;
 }
 
 enum SensorType {
@@ -126,6 +129,27 @@ message QueryFrames {
     string name = 4 [(nanopb).max_size = 64]; // internal name
     int64 from_timestamp = 20; // must be set
     int64 to_timestamp = 21; // if 0, all the way until the latest
+}
+
+message QueryCache {
+    MessageType message_type = 1;
+    string name = 4 [(nanopb).max_size = 64]; // internal name
+}
+
+/*
+// use PublishFrame
+message ResultFrame {
+    MessageType message_type = 1;
+    string name = 4 [(nanopb).max_size = 64]; // internal name
+    int64 timestamp = 13; // timestamp for this particular frame in microseconds realtime
+    int32 offset = 18; // sample offset in the current series, may reset if the source drops (like timestamp, but counting samples from 0)
+    repeated ChannelData channels = 19 [(nanopb).max_count = 4];
+}
+*/
+
+message ResultDone {
+    MessageType message_type = 1;
+    string name = 4 [(nanopb).max_size = 64]; // internal name
 }
 
 /* end of file */

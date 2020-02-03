@@ -42,6 +42,12 @@ PB_BIND(PublishFrame, PublishFrame, 4)
 PB_BIND(QueryFrames, QueryFrames, AUTO)
 
 
+PB_BIND(QueryCache, QueryCache, AUTO)
+
+
+PB_BIND(ResultDone, ResultDone, AUTO)
+
+
 
 
 
