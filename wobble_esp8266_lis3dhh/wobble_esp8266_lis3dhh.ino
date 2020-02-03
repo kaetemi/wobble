@@ -5,8 +5,8 @@
 
 #define CS_PIN 15
 
-#define INT1_PIN 4
-#define INT2_PIN 5
+#define INT1_PIN 5
+#define INT2_PIN 4
 
 // Boards Manager URLs:
 // https://dl.espressif.com/dl/package_esp32_index.json (esp32)
@@ -30,6 +30,9 @@
 // https://www.circuito.io/app?components=513,360217,1671987
 // https://github.com/stm32duino/LIS3DHH/blob/master/src/lis3dhh_reg.h
 // https://www.st.com/content/ccc/resource/technical/document/application_note/group0/b5/5a/15/58/aa/82/44/e8/DM00477046/files/DM00477046.pdf/jcr:content/translations/en.DM00477046.pdf
+// https://www.reddit.com/r/esp8266/comments/ausw32/turn_off_built_in_blue_led_wemos_d1_mini/
+// https://www.arduino.cc/reference/en/language/functions/external-interrupts/attachinterrupt/
+// https://forum.arduino.cc/index.php?topic=616264.0
 
 #ifdef ESP32
 #include <esp32-hal-cpu.h>
@@ -69,7 +72,7 @@ NTPClient timeClient(ntpUDP); // ntpUDP, "europe.pool.ntp.org", 3600, 60000
 
 WebSocketsClient webSocket;
 
-LIS3DHHSensor sensor(&SPI, CS_PIN);
+LIS3DHHSensor *sensor;
 
 const unsigned long ntpRefresh = 4 * 60000;
 unsigned long ntpLast = 0;
@@ -92,26 +95,27 @@ bool testStreamProblem = false;
 int64_t lastTestStreamTimestamp = 0;
 int32_t samplesSent = 0;
 
-bool sensorChecked = false;
+volatile bool sensorChecked = false;
 
 #define ACCEL_BUFFER_SZ 2048
 #define ACCEL_BUFFER_MASK (ACCEL_BUFFER_SZ - 1)
 const int accelStreamAlias = 2;
 volatile bool accelStreamOpen = false;
-volatile bool accelStreamOverflow = false;
+volatile bool accelStreamProblem = false;
 volatile int16_t accelX[ACCEL_BUFFER_SZ], accelY[ACCEL_BUFFER_SZ], accelZ[ACCEL_BUFFER_SZ];
 volatile int16_t accelRd = 0, accelWr = 0;
 volatile int16_t accelRefWr = 0;
 volatile int64_t accelRefTs = 0, accelNextTs = 0;
+volatile int accelReads = 0;
 
 // Called from interrupt
-void accelPushValue(int16_t x, int16_t y, int16_t z, int i) {
+void ICACHE_RAM_ATTR accelPushValue(int16_t x, int16_t y, int16_t z, int i) {
   if (!accelStreamOpen) return;
-  if (accelStreamOverflow) return;
+  if (accelStreamProblem) return;
   int16_t rd = accelRd, wr = accelWr;
   int16_t space = (ACCEL_BUFFER_SZ - wr + rd - 1) & ACCEL_BUFFER_MASK;
   if (!space) {
-    accelStreamOverflow = true;
+    accelStreamProblem = true;
     // System will restart stream & clear buffer
     return;
   }
@@ -122,8 +126,10 @@ void accelPushValue(int16_t x, int16_t y, int16_t z, int i) {
   if (i == 0 && ts) {
     // This is the first read in this fifo batch,
     // the last stored timestamp is good to use!
+    // Store the next batch timestamp when done processing this fifo.
     accelRefWr = wr;
     accelRefTs = ts;
+    accelNextTs = 0;
   }
   accelWr = (wr + 1) & ACCEL_BUFFER_MASK;
 }
@@ -131,12 +137,12 @@ void accelPushValue(int16_t x, int16_t y, int16_t z, int i) {
 // Called from main function
 bool accelReadValues(int32_t *x, int32_t *y, int32_t *z, int count, int64_t *timestamp) {
   if (!accelStreamOpen) return false;
-  if (accelStreamOverflow) return false;
+  if (accelStreamProblem) return false;
   // Only set timestamp if a timestamp is wanted
   // A timestamp is only needed for opening the stream
   int16_t rd = accelRd, wr = accelWr;
   int64_t refTs = accelRefTs;
-  int16_t refWr = accelRefWr;
+  int16_t refWr = accelRefWr; // The opposite order of writing here is to ensure an invalid refOff when the interrupt occurs here
   int16_t space = (ACCEL_BUFFER_SZ - wr + rd - 1) & ACCEL_BUFFER_MASK;
   int16_t written = ACCEL_BUFFER_SZ - space;
   int16_t refOff = (refWr - rd) & ACCEL_BUFFER_MASK;
@@ -159,10 +165,6 @@ bool accelReadValues(int32_t *x, int32_t *y, int32_t *z, int count, int64_t *tim
   }
   accelRd = (rd + count) & ACCEL_BUFFER_MASK;
   return true;
-}
-
-void accelRead() {
-  
 }
 
 union {
@@ -196,7 +198,11 @@ void setup() {
   pinMode(INT1_PIN, INPUT);
   pinMode(INT2_PIN, INPUT);
   
+  pinMode(LED_BUILTIN, OUTPUT);
+  digitalWrite(LED_BUILTIN, LOW); // Turn on LED
+  
   SPI.begin();
+  sensor = new LIS3DHHSensor(&SPI, CS_PIN);
 }
 
 void delaySafe(int32_t maxTimeout = 1000) {
@@ -232,7 +238,7 @@ void clockUp() {
 #endif
 }
 
-int64_t currentTimestamp() {
+int64_t ICACHE_RAM_ATTR currentTimestamp() {
   const unsigned long currentMicros = micros();
   const unsigned long deltaMicros = currentMicros - microsLast;
   ntpOffset += deltaMicros;
@@ -311,6 +317,80 @@ void webSocketEvent(WStype_t type, uint8_t *payload, size_t length) {
     case WStype_FRAGMENT_FIN:
       break;
   }
+}
+
+void ICACHE_RAM_ATTR accelRead() {
+  LIS3DHHStatusTypeDef res;
+  lis3dhh_reg_t reg;
+  reg.byte = 0;
+  res = sensor->ReadReg(LIS3DHH_FIFO_SRC, &reg.byte);
+  if (res != LIS3DHH_STATUS_OK) {
+    accelStreamProblem = true;
+    return;
+  }
+  if (reg.fifo_src.ovrn) {
+    // Serial.println("FIFO Overrun");
+    // Serial.println(reg.fifo_src.fss);
+    // digitalWrite(LED_BUILTIN, LOW); // Turn on LED
+    accelStreamProblem = true;
+    // Don't return, flush
+    // Serial.println("FIFO Overrun");
+    // Serial.println((int)(currentTimestamp() - accelNextTs));
+    //sensorChecked = false; // Reset?
+    //return;
+  }
+
+/*
+  int16_t sample[3];
+  res = sensor->Get_X_AxesRaw(sample);
+  ++accelReads;
+  if (res != LIS3DHH_STATUS_OK) {
+    accelStreamProblem = true;
+    // digitalWrite(LED_BUILTIN, HIGH); // Turn off LED
+    return;
+  }
+*/
+
+  //if (reg.fifo_src.fss > 12) {
+    while (reg.fifo_src.fss) {
+      // Serial.println(reg.fifo_src.fss);
+      // digitalWrite(LED_BUILTIN, LOW); // Turn on LED
+      // While data is available, read it!
+      for (int i = 0; i < reg.fifo_src.fss; ++i) {
+        int16_t sample[3];
+        res = sensor->Get_X_AxesRaw(sample);
+        ++accelReads;
+        if (res != LIS3DHH_STATUS_OK) {
+          accelStreamProblem = true;
+          // digitalWrite(LED_BUILTIN, HIGH); // Turn off LED
+          return;
+        }
+      }
+      res = sensor->ReadReg(LIS3DHH_FIFO_SRC, &reg.byte);
+      if (res != LIS3DHH_STATUS_OK) {
+        accelStreamProblem = true;
+        // digitalWrite(LED_BUILTIN, HIGH); // Turn off LED
+        return;
+      }
+    }
+  //}
+
+  /*
+  if (accelStreamProblem) {
+    reg.byte = 0;
+    res = sensor->ReadReg(LIS3DHH_CTRL_REG1, &reg.byte);
+    // if (res != LIS3DHH_STATUS_OK) { Serial.println("Failed ReadReg CTRL_REG1!"); }
+    else {
+      reg.ctrl_reg1.norm_mod_en = 1;
+      res = sensor->WriteReg(LIS3DHH_CTRL_REG1, reg.byte);
+      // if (res != LIS3DHH_STATUS_OK) { Serial.println("Failed WriteReg CTRL_REG1!"); }
+    }
+  }
+  */
+
+  // Timestamp for the next read batch
+  accelNextTs = currentTimestamp();
+  // digitalWrite(LED_BUILTIN, HIGH); // Turn off LED
 }
 
 void loop() {
@@ -476,12 +556,13 @@ void loop() {
   if (!sensorChecked) {
     LIS3DHHStatusTypeDef res;
     clockUp();
+    digitalWrite(LED_BUILTIN, HIGH); // Turn off LED
 
     // Check ID
     Serial.println();
     Serial.print("Sensor ID: ");
     uint8_t id;
-    res = sensor.ReadID(&id);
+    res = sensor->ReadID(&id);
     Serial.println(id);
     if (res != LIS3DHH_STATUS_OK || id != 17) {
       Serial.println("Not OK!");
@@ -492,39 +573,79 @@ void loop() {
     // Write settings
     lis3dhh_reg_t reg;
     // ctrl_reg1, int1_ctrl, int2_ctrl, ctrl_reg4, ctrl_reg5, status, fifo_ctrl, fifo_src
-    
-    // Enable FIFO
-    reg.byte = 0;
-    reg.fifo_ctrl.fth = 12; // Threshold 12 / 32 fifo samples
-    reg.fifo_ctrl.fmode = LIS3DHH_FIFO_MODE;
-    res = sensor.WriteReg(LIS3DHH_FIFO_CTRL, reg.byte);
-    if (res != LIS3DHH_STATUS_OK) { Serial.println("Failed WriteReg LIS3DHH_FIFO_CTRL!"); delaySafe(); return; }
 
+    // Disable Accelerometer
+    //res = sensor->Disable_X();
+    //if (res != LIS3DHH_STATUS_OK) { Serial.println("Failed Disable_X!"); delaySafe(); return; }
+
+    // Enable Accelerometer
+    //res = sensor->Enable_X();
+    //if (res != LIS3DHH_STATUS_OK) { Serial.println("Failed Enable_X!"); delaySafe(); return; }
+
+    // Enable FIFO
     reg.byte = 0;
     reg.ctrl_reg4.not_used_01 = 1; // Must be 1
     reg.ctrl_reg4.fifo_en = 1; // Enable FIFO
     // dsp = 0 (440Hz bw), st = 0 (235Hz bw)
-    res = sensor.WriteReg(LIS3DHH_CTRL_REG4, reg.byte);
+    res = sensor->WriteReg(LIS3DHH_CTRL_REG4, reg.byte);
     if (res != LIS3DHH_STATUS_OK) { Serial.println("Failed WriteReg LIS3DHH_CTRL_REG4!"); delaySafe(); return; }
+
+    // Set FIFO options
+    reg.byte = 0;
+    reg.fifo_ctrl.fth = 24; // 12; // Threshold 12 / 32 fifo samples
+    reg.fifo_ctrl.fmode = LIS3DHH_FIFO_MODE;
+    res = sensor->WriteReg(LIS3DHH_FIFO_CTRL, reg.byte);
+    if (res != LIS3DHH_STATUS_OK) { Serial.println("Failed WriteReg LIS3DHH_FIFO_CTRL!"); delaySafe(); return; }
     
     // Enable INT1 on FIFO threshold reached
     reg.byte = 0;
+    // reg.int1_ctrl.int1_drdy = 1;
     reg.int1_ctrl.int1_fth = 1;
-    res = sensor.WriteReg(LIS3DHH_INT1_CTRL, reg.byte);
+    res = sensor->WriteReg(LIS3DHH_INT1_CTRL, reg.byte);
     if (res != LIS3DHH_STATUS_OK) { Serial.println("Failed WriteReg LIS3DHH_INT1_CTRL!"); delaySafe(); return; }
+    
+    // Enable INT2 on FIFO overrun
+    reg.byte = 0;
+    reg.int2_ctrl.int2_ovr = 1;
+    res = sensor->WriteReg(LIS3DHH_INT2_CTRL, reg.byte);
+    if (res != LIS3DHH_STATUS_OK) { Serial.println("Failed WriteReg LIS3DHH_INT2_CTRL!"); delaySafe(); return; }
 
-    // Enable Accelerometer
-    res = sensor.Enable_X();
+    // TODO: Clear FIFO?
+    reg.byte = 0;
+    res = sensor->ReadReg(LIS3DHH_FIFO_SRC, &reg.byte);
+    if (res != LIS3DHH_STATUS_OK) { Serial.println("Failed ReadReg LIS3DHH_FIFO_SRC!"); delaySafe(); return; }
+    Serial.print("FTH: ");
+    Serial.println(reg.fifo_src.fth);
+    Serial.print("OVRN: ");
+    Serial.println(reg.fifo_src.ovrn);
+    Serial.print("FSS: ");
+    Serial.println(reg.fifo_src.fss);
+
+    // Flush FIFO
+    for (int i = 0; i < reg.fifo_src.fss; ++i) {
+      int16_t sample[3];
+      res = sensor->Get_X_AxesRaw(sample);
+      Serial.print("X: ");
+      Serial.print(sample[0]);
+      Serial.print(", Y: ");
+      Serial.print(sample[1]);
+      Serial.print(", Z: ");
+      Serial.println(sample[2]);
+    }
+
+    // Attach interrupt and flush FIFO to kick it into effect
+    attachInterrupt(digitalPinToInterrupt(INT1_PIN), accelRead, RISING);
+    // Interrupt with SPI not working reliably
+    // Regular call not reliable either due to WiFi!
+    
+    res = sensor->Enable_X();
     if (res != LIS3DHH_STATUS_OK) { Serial.println("Failed Enable_X!"); delaySafe(); return; }
-
-    // Test
-    // int16_t sample[3];
-    // res = sensor.Get_X_AxesRaw(sample);
 
     // OK!
     Serial.println("OK!");
     Serial.println();
     sensorChecked = true; // After this, only access sensor from interrupt!
+    // accelRead();
   }
 
   // Routine to submit test stream
@@ -614,6 +735,13 @@ void loop() {
   // Clock down when we're done!
   clockDown();
   delayReset();
+
+  /*
+  accelRead();
+  */
+  if (accelReads % 110 == 0) {
+    Serial.println(accelReads);
+  }
 }
 
 /* end of file */
