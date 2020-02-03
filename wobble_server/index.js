@@ -71,7 +71,14 @@ const server = http.createServer(function (request, response) {
             return response.end('File not found');
         }
         response.setHeader('Content-Type', contentType);
-        response.end(data);
+        let d = data;
+        if (contentType.startsWith('text/')) {
+            d = d.toString();
+        }
+        if (file == "/display.js") {
+            d = d.replace('require("./wobble_protocol.json")', JSON.stringify(wobbleProtocolDescriptor));
+        }
+        response.end(d);
     });
 });
 
@@ -81,6 +88,8 @@ server.on('clientError', function onClientError(err, socket) {
 });
 
 const wss = new WebSocket.Server({ server });
+let index = 0;
+const wsMap = {};
 
 const listSubscribed = {};
 const streams = {};
@@ -164,18 +173,23 @@ setInterval(function rotate() {
 
 wss.on('connection', function connection(ws) {
     console.log("New connection!");
-    streamMap[ws] = {};
+    ++index;
+    ws.wobbleIndex = index;
+    wsMap[ws.wobbleIndex] = ws;
+    streamMap[ws.wobbleIndex] = {};
 
     let heartbeat = setInterval(function ping() {
         ws.ping();
     }, 30000);
 
     ws.on('message', function incoming(buffer) {
-        if (!streamMap[ws]) {
+        if (!streamMap[ws.wobbleIndex]) {
             return; // Can't do anything with late messages
         }
         let undefinedMessage = UndefinedMessage.decode(buffer);
-        if (undefinedMessage.messageType != MessageType.WRITE_FRAME) {
+        if (undefinedMessage.messageType != MessageType.WRITE_FRAME
+            && undefinedMessage.messageType != MessageType.PUBLISH_FRAME
+            && undefinedMessage.messageType != MessageType.RESULT_FRAME) {
             console.log('Received: ')
             console.log(undefinedMessage);
         }
@@ -232,9 +246,12 @@ wss.on('connection', function connection(ws) {
                 };
                 streams[name] = stream;
                 console.log(Object.keys(stream.subscribed).length);
-                streamMap[ws][alias] = name;
+                streamMap[ws.wobbleIndex][alias] = name;
                 for (let k in listSubscribed) {
-                    k.send(publishBuffer);
+                    let wsc = wsMap[k];
+                    if (wsc) {
+                        wsc.send(publishBuffer);
+                    }
                 }
                 break;
             }
@@ -242,7 +259,7 @@ wss.on('connection', function connection(ws) {
                 let closeStream = CloseStream.decode(buffer);
                 console.log(closeStream);
                 let alias = writeFrame.alias;
-                let name = streamMap[ws][alias];
+                let name = streamMap[ws.wobbleIndex][alias];
                 if (!name) {
                     setTimeout(function () { ws.close(); }, 1280); // Bad alias
                     break;
@@ -255,14 +272,14 @@ wss.on('connection', function connection(ws) {
                     stream.fileWriter = null;
                 }
                 // Remove alias
-                delete streamMap[ws][alias];
+                delete streamMap[ws.wobbleIndex][alias];
                 break;
             }
             case MessageType.WRITE_FRAME: {
                 let writeFrame = WriteFrame.decode(buffer);
                 // console.log(writeFrame);
                 let alias = writeFrame.alias;
-                let name = streamMap[ws][alias];
+                let name = streamMap[ws.wobbleIndex][alias];
                 if (!name) {
                     setTimeout(function () { ws.close(); }, 1280); // Bad alias
                     break;
@@ -312,7 +329,10 @@ wss.on('connection', function connection(ws) {
                 };
                 let publishBuffer = PublishFrame.encode(publishFrame).finish();
                 for (let k in stream.subscribed) {
-                    k.send(publishBuffer);
+                    let wsc = wsMap[k];
+                    if (wsc) {
+                        wsc.send(publishBuffer);
+                    }
                 }
                 // Store cache
                 publishFrame.messageType = MessageType.RESULT_FRAME;
@@ -335,7 +355,7 @@ wss.on('connection', function connection(ws) {
                     break; // Bad name
                 }
                 let stream = streams[name];
-                stream.subscribed[ws] = true;
+                stream.subscribed[ws.wobbleIndex] = true;
                 break;
             }
             case MessageType.UNSUBSCRIBE: {
@@ -346,15 +366,15 @@ wss.on('connection', function connection(ws) {
                     break; // Bad name
                 }
                 let stream = streams[name];
-                if (stream.subscribed[ws]) {
-                    delete streamsubscribed[ws];
+                if (stream.subscribed[ws.wobbleIndex]) {
+                    delete stream.subscribed[ws.wobbleIndex];
                 }
                 break;
             }
             case MessageType.SUBSCRIBE_STREAM_LIST: {
                 let subscribeStreamList = SubscribeStreamList.decode(buffer);
                 console.log(subscribeStreamList);
-                listSubscribed[ws] = true;
+                listSubscribed[ws.wobbleIndex] = true;
                 for (let k in streams) {
                     ws.send(streams[k].publishStream);
                 }
@@ -378,16 +398,16 @@ wss.on('connection', function connection(ws) {
     ws.on('close', function close() {
         // Cleanup
         console.log("Closed connection!");
-        delete streamMap[ws];
+        delete streamMap[ws.wobbleIndex];
         clearInterval(heartbeat);
-        if (listSubscribed[ws]) {
-            delete listSubscribed[ws];
+        if (listSubscribed[ws.wobbleIndex]) {
+            delete listSubscribed[ws.wobbleIndex];
         }
         for (let k in streams) {
             // console.log(k);
             let stream = streams[k];
-            if (stream.subscribed[ws]) {
-                delete stream.subscribed[ws];
+            if (stream.subscribed[ws.wobbleIndex]) {
+                delete stream.subscribed[ws.wobbleIndex];
             }
             if (stream.ws == ws) {
                 if (stream.fileWriter) {
@@ -398,6 +418,7 @@ wss.on('connection', function connection(ws) {
                 }
             }
         }
+        delete wsMap[ws.wobbleIndex];
     });
 });
 
