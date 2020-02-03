@@ -5,6 +5,9 @@
 
 #define CS_PIN 15
 
+#define INT1_PIN 4
+#define INT2_PIN 5
+
 // Boards Manager URLs:
 // https://dl.espressif.com/dl/package_esp32_index.json (esp32)
 // https://arduino.esp8266.com/stable/package_esp8266com_index.json (esp8266)
@@ -91,6 +94,77 @@ int32_t samplesSent = 0;
 
 bool sensorChecked = false;
 
+#define ACCEL_BUFFER_SZ 2048
+#define ACCEL_BUFFER_MASK (ACCEL_BUFFER_SZ - 1)
+const int accelStreamAlias = 2;
+volatile bool accelStreamOpen = false;
+volatile bool accelStreamOverflow = false;
+volatile int16_t accelX[ACCEL_BUFFER_SZ], accelY[ACCEL_BUFFER_SZ], accelZ[ACCEL_BUFFER_SZ];
+volatile int16_t accelRd = 0, accelWr = 0;
+volatile int16_t accelRefWr = 0;
+volatile int64_t accelRefTs = 0, accelNextTs = 0;
+
+// Called from interrupt
+void accelPushValue(int16_t x, int16_t y, int16_t z, int i) {
+  if (!accelStreamOpen) return;
+  if (accelStreamOverflow) return;
+  int16_t rd = accelRd, wr = accelWr;
+  int16_t space = (ACCEL_BUFFER_SZ - wr + rd - 1) & ACCEL_BUFFER_MASK;
+  if (!space) {
+    accelStreamOverflow = true;
+    // System will restart stream & clear buffer
+    return;
+  }
+  accelX[accelWr] = x;
+  accelY[accelWr] = y;
+  accelZ[accelWr] = z;
+  int16_t ts = accelNextTs;
+  if (i == 0 && ts) {
+    // This is the first read in this fifo batch,
+    // the last stored timestamp is good to use!
+    accelRefWr = wr;
+    accelRefTs = ts;
+  }
+  accelWr = (wr + 1) & ACCEL_BUFFER_MASK;
+}
+
+// Called from main function
+bool accelReadValues(int32_t *x, int32_t *y, int32_t *z, int count, int64_t *timestamp) {
+  if (!accelStreamOpen) return false;
+  if (accelStreamOverflow) return false;
+  // Only set timestamp if a timestamp is wanted
+  // A timestamp is only needed for opening the stream
+  int16_t rd = accelRd, wr = accelWr;
+  int64_t refTs = accelRefTs;
+  int16_t refWr = accelRefWr;
+  int16_t space = (ACCEL_BUFFER_SZ - wr + rd - 1) & ACCEL_BUFFER_MASK;
+  int16_t written = ACCEL_BUFFER_SZ - space;
+  int16_t refOff = (refWr - rd) & ACCEL_BUFFER_MASK;
+  if (timestamp) {
+    if (refOff >= written) {
+      // Don't have a valid timestamp currently
+      return false;
+    }
+    *timestamp = accelRefTs;
+  }
+  if (count >= written) {
+    // Don't have enough values currently
+    return false;
+  }
+  for (int i = 0; i < count; ++i) {
+    int rdi = (rd + i) & ACCEL_BUFFER_MASK;
+    x[i] = accelX[rdi];
+    y[i] = accelY[rdi];
+    z[i] = accelZ[rdi];
+  }
+  accelRd = (rd + count) & ACCEL_BUFFER_MASK;
+  return true;
+}
+
+void accelRead() {
+  
+}
+
 union {
   OpenStream openStream;
   CloseStream closeStream;
@@ -119,6 +193,9 @@ void setup() {
   } */
 #endif
 
+  pinMode(INT1_PIN, INPUT);
+  pinMode(INT2_PIN, INPUT);
+  
   SPI.begin();
 }
 
@@ -470,13 +547,14 @@ void loop() {
     messages.openStream.info.frequency = 1100;
     messages.openStream.info.bits = 13;
     messages.openStream.info.timestamp = lastTestStreamTimestamp; // Should use the timestamp that was set when the sensor fifo was cleared
-    strcpy(messages.openStream.info.description, "Test Stream");
-    messages.openStream.info.channel_descriptions_count = 2;
-    strcpy(messages.openStream.info.channel_descriptions[0], "Test Channel 0");
-    strcpy(messages.openStream.info.channel_descriptions[1], "Test Channel 1");
+    strcpy(messages.openStream.info.description, accelDescription);
+    messages.openStream.info.channel_descriptions_count = 3;
+    strcpy(messages.openStream.info.channel_descriptions[0], "X");
+    strcpy(messages.openStream.info.channel_descriptions[1], "Y");
+    strcpy(messages.openStream.info.channel_descriptions[2], "Z");
     messages.openStream.info.timestamp_precision = 1000000; // 1s
     messages.openStream.info.sensor = SensorType_ACCELEROMETER;
-    strcpy(messages.openStream.info.hardware, "TestHW");
+    strcpy(messages.openStream.info.hardware, "LIS3DHH");
     messages.openStream.info.unit = Unit_G;
     messages.openStream.info.scale = 2.5f;
     messages.openStream.info.zoom = 10.0f;
