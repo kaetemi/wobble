@@ -259,9 +259,10 @@ wss.on('connection', function connection(ws) {
             case MessageType.CLOSE_STREAM: {
                 let closeStream = CloseStream.decode(buffer);
                 console.log(closeStream);
-                let alias = writeFrame.alias;
+                let alias = closeStream.alias;
                 let name = streamMap[ws.wobbleIndex][alias];
                 if (!name) {
+                    console.log("Bad alias");
                     setTimeout(function () { ws.close(); }, 1280); // Bad alias
                     break;
                 }
@@ -282,12 +283,14 @@ wss.on('connection', function connection(ws) {
                 let alias = writeFrame.alias;
                 let name = streamMap[ws.wobbleIndex][alias];
                 if (!name) {
+                    console.log("Bad alias");
                     setTimeout(function () { ws.close(); }, 1280); // Bad alias
                     break;
                 }
                 let stream = streams[name];
                 let channels = writeFrame.channels && writeFrame.channels.length;
                 if (!channels) {
+                    console.log("Missing channels");
                     setTimeout(function () { ws.close(); }, 1280); // Missing channels
                     break;
                 }

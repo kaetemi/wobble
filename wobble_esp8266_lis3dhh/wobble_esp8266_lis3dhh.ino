@@ -89,33 +89,55 @@ bool webSocketConnected = false;
 bool webSocketConnecting = false;
 int32_t safeTimeout = 10;
 
+/*
 const int testStreamAlias = 1;
 bool testStreamOpen = false;
 bool testStreamProblem = false;
 int64_t lastTestStreamTimestamp = 0;
 int32_t samplesSent = 0;
+*/
 
-volatile bool sensorChecked = false;
+bool sensorChecked = false;
 
 #define ACCEL_BUFFER_SZ 2048
 #define ACCEL_BUFFER_MASK (ACCEL_BUFFER_SZ - 1)
 const int accelStreamAlias = 2;
-volatile bool accelStreamOpen = false;
-volatile bool accelStreamProblem = false;
-volatile int16_t accelX[ACCEL_BUFFER_SZ], accelY[ACCEL_BUFFER_SZ], accelZ[ACCEL_BUFFER_SZ];
-volatile int16_t accelRd = 0, accelWr = 0;
-volatile int16_t accelRefWr = 0;
-volatile int64_t accelRefTs = 0, accelNextTs = 0;
-volatile int accelReads = 0;
+bool accelStreamOpen = false;
+bool accelStreamProblem = false;
+int16_t accelX[ACCEL_BUFFER_SZ], accelY[ACCEL_BUFFER_SZ], accelZ[ACCEL_BUFFER_SZ];
+int16_t accelRd = 0, accelWr = 0;
+int16_t accelRefWr = 0;
+int64_t accelRefTs = 0, accelNextTs = 0;
+int accelReads = 0;
+int32_t accelSamplesSent = 0;
 os_timer_t accelTimer;
 
-// Called from ~~interrupt~~ timer
+void delaySafe(int32_t maxTimeout = 1000) {
+  delay(safeTimeout);
+  if (safeTimeout < maxTimeout) {
+    safeTimeout *= 2;
+  }
+}
+
+void delayReset() {
+  safeTimeout = 10;
+}
+
+void accelReset() {
+  accelRd = 0;
+  accelWr = 0;
+  accelRefWr = 0;
+  accelRefTs = 0;
+}
+
+// Called from timer
 void ICACHE_RAM_ATTR accelPushValue(int16_t x, int16_t y, int16_t z, int i) {
-  if (!accelStreamOpen) return;
+  // if (!accelStreamOpen) return;
   if (accelStreamProblem) return;
   int16_t rd = accelRd, wr = accelWr;
   int16_t space = (ACCEL_BUFFER_SZ - wr + rd - 1) & ACCEL_BUFFER_MASK;
   if (!space) {
+    Serial.println("Accelerometer buffer out of space");
     accelStreamProblem = true;
     // System will restart stream & clear buffer
     return;
@@ -123,7 +145,15 @@ void ICACHE_RAM_ATTR accelPushValue(int16_t x, int16_t y, int16_t z, int i) {
   accelX[accelWr] = x;
   accelY[accelWr] = y;
   accelZ[accelWr] = z;
-  int16_t ts = accelNextTs;
+  /*
+  Serial.print("X: ");
+  Serial.print(x);
+  Serial.print(", Y: ");
+  Serial.print(y);
+  Serial.print(", Z: ");
+  Serial.println(z);
+  */
+  int64_t ts = accelNextTs;
   if (i == 0 && ts) {
     // This is the first read in this fifo batch,
     // the last stored timestamp is good to use!
@@ -131,24 +161,48 @@ void ICACHE_RAM_ATTR accelPushValue(int16_t x, int16_t y, int16_t z, int i) {
     accelRefWr = wr;
     accelRefTs = ts;
     accelNextTs = 0;
+    if (!accelStreamOpen) {
+      accelRd = wr; // Skip ahead
+    }
   }
   accelWr = (wr + 1) & ACCEL_BUFFER_MASK;
 }
 
+bool accelOpenOrPublish(int count) {
+  if (accelStreamProblem) return false;
+  int16_t rd = accelRd, wr = accelWr;
+  if (accelStreamOpen) {
+    int16_t space = (ACCEL_BUFFER_SZ - wr + rd - 1) & ACCEL_BUFFER_MASK;
+    int16_t written = ACCEL_BUFFER_SZ - space;
+    return written >= count;
+  } else {
+    int64_t refTs = accelRefTs;
+    int16_t refWr = accelRefWr;
+    int16_t space = (ACCEL_BUFFER_SZ - wr + rd - 1) & ACCEL_BUFFER_MASK;
+    int16_t written = ACCEL_BUFFER_SZ - space;
+    int16_t refOff = (refWr - rd) & ACCEL_BUFFER_MASK;
+    // Serial.println(refOff);
+    // Serial.println(written);
+    // Serial.println(PriUint64<DEC>(refTs));
+    delaySafe();
+    return (refOff < written) && refTs;
+  }
+}
+
 // Called from main function
 bool accelReadValues(int32_t *x, int32_t *y, int32_t *z, int count, int64_t *timestamp) {
-  if (!accelStreamOpen) return false;
+  // if (!accelStreamOpen) return false;
   if (accelStreamProblem) return false;
   // Only set timestamp if a timestamp is wanted
   // A timestamp is only needed for opening the stream
   int16_t rd = accelRd, wr = accelWr;
   int64_t refTs = accelRefTs;
-  int16_t refWr = accelRefWr; // The opposite order of writing here is to ensure an invalid refOff when the interrupt occurs here
+  int16_t refWr = accelRefWr;
   int16_t space = (ACCEL_BUFFER_SZ - wr + rd - 1) & ACCEL_BUFFER_MASK;
   int16_t written = ACCEL_BUFFER_SZ - space;
   int16_t refOff = (refWr - rd) & ACCEL_BUFFER_MASK;
   if (timestamp) {
-    if (refOff >= written) {
+    if (refOff >= written || !refTs) {
       // Don't have a valid timestamp currently
       return false;
     }
@@ -204,17 +258,6 @@ void setup() {
   
   SPI.begin();
   sensor = new LIS3DHHSensor(&SPI, CS_PIN);
-}
-
-void delaySafe(int32_t maxTimeout = 1000) {
-  delay(safeTimeout);
-  if (safeTimeout < maxTimeout) {
-    safeTimeout *= 2;
-  }
-}
-
-void delayReset() {
-  safeTimeout = 10;
 }
 
 void clockDown() {
@@ -327,7 +370,7 @@ void webSocketEvent(WStype_t type, uint8_t *payload, size_t length) {
 }
 
 void ICACHE_RAM_ATTR accelRead(void *) {
-  int64_t nextTs = currentTimestamp();
+  int64_t nextTs = currentTimestampNoAdj();
   LIS3DHHStatusTypeDef res;
   lis3dhh_reg_t reg;
   reg.byte = 0;
@@ -338,7 +381,7 @@ void ICACHE_RAM_ATTR accelRead(void *) {
     return;
   }
   if (reg.fifo_src.ovrn) {
-    Serial.println("FIFO Overrun");
+    Serial.println("Accelerometer FIFO Overrun");
     accelStreamProblem = true;
   }
   for (int i = 0; i < reg.fifo_src.fss; ++i) {
@@ -497,10 +540,10 @@ void loop() {
   }
   if (!webSocketConnected) {
     clockUp();
-    if (testStreamOpen) {
-      // Close test stream
-      testStreamOpen = false;
-      testStreamProblem = false;
+    if (accelStreamOpen) {
+      // Close accel stream
+      accelStreamOpen = false;
+      // accelStreamProblem = false;
     }
     webSocket.begin(serverAddress, serverPort, "/", "wobble1");
     webSocket.onEvent(webSocketEvent);
@@ -614,9 +657,125 @@ void loop() {
     Serial.println("OK!");
     Serial.println();
     sensorChecked = true; // After this, only access sensor from interrupt!
-    // accelRead();
+    accelRead(NULL); // Quick first read
   }
 
+  // Routine to stream accelerometer samples
+  if (accelStreamProblem) {
+    clockUp();
+    accelReset();
+    if (accelStreamOpen) {
+      Serial.println("Close accelerometer stream");
+      messages.closeStream = (CloseStream)CloseStream_init_zero;
+      messages.closeStream.message_type = MessageType_CLOSE_STREAM;
+      messages.closeStream.alias = accelStreamAlias;
+      pb_ostream_t stream = pb_ostream_from_buffer(buffers.any, sizeof(buffers));
+      if (!pb_encode(&stream, CloseStream_fields, &messages.closeStream)) {
+        Serial.println("Failed to encode CloseStream");
+        delaySafe();
+        return;
+      }
+      if (!webSocket.sendBIN(buffers.any, stream.bytes_written)) {
+        Serial.println("Failed to send CloseStream");
+        delaySafe();
+        return;
+      }
+      accelStreamOpen = false;
+    }
+    accelStreamProblem = false;
+    accelRead(NULL); // Quick read
+  }
+  if (accelOpenOrPublish(55)) {
+    clockUp();
+    if (!accelStreamOpen) {
+      int64_t timestamp;
+      if (accelReadValues(NULL, NULL, NULL, 0, &timestamp)) {
+        Serial.print("Open accelerometer stream at ");
+        Serial.println(PriUint64<DEC>(timestamp));
+        messages.openStream = (OpenStream)OpenStream_init_zero;
+        messages.openStream.message_type = MessageType_OPEN_STREAM;
+        strcpy(messages.openStream.password, accelPassword);
+        messages.openStream.has_info = true;
+        strcpy(messages.openStream.info.name, accelName);
+        messages.openStream.alias = accelStreamAlias;
+        messages.openStream.info.channels = 3;
+        messages.openStream.info.frequency = 1100;
+        messages.openStream.info.bits = 13;
+        messages.openStream.info.timestamp = timestamp; // Should use the timestamp that was set when the sensor fifo was cleared
+        strcpy(messages.openStream.info.description, accelDescription);
+        messages.openStream.info.channel_descriptions_count = 3;
+        strcpy(messages.openStream.info.channel_descriptions[0], "X");
+        strcpy(messages.openStream.info.channel_descriptions[1], "Y");
+        strcpy(messages.openStream.info.channel_descriptions[2], "Z");
+        messages.openStream.info.timestamp_precision = 1000000; // 1s
+        messages.openStream.info.sensor = SensorType_ACCELEROMETER;
+        strcpy(messages.openStream.info.hardware, "LIS3DHH");
+        messages.openStream.info.unit = Unit_G;
+        messages.openStream.info.scale = 2.5f;
+        messages.openStream.info.zoom = 10.0f;
+        messages.openStream.info.latitude = latitude;
+        messages.openStream.info.longitude = longitude;
+        pb_ostream_t stream = pb_ostream_from_buffer(buffers.any, sizeof(buffers));
+        if (!pb_encode(&stream, OpenStream_fields, &messages.openStream)) {
+          Serial.println("Failed to encode OpenStream");
+          delaySafe();
+          return;
+        }
+        if (!webSocket.sendBIN(buffers.any, stream.bytes_written)) {
+          Serial.println("Failed to send OpenStream");
+          delaySafe();
+          return;
+        }
+        accelStreamOpen = true;
+        accelStreamProblem = false;
+        accelSamplesSent = 0;
+      }
+    }
+    if (accelStreamOpen) {
+      messages.writeFrame = (WriteFrame)WriteFrame_init_zero;
+      if (accelReadValues(
+          messages.writeFrame.channels[0].data,
+          messages.writeFrame.channels[1].data,
+          messages.writeFrame.channels[2].data,
+          55, NULL)) {
+        messages.writeFrame.message_type = MessageType_WRITE_FRAME;
+        messages.writeFrame.alias = accelStreamAlias;
+        messages.writeFrame.channels_count = 3;
+        messages.writeFrame.channels[0].data_count = 55;
+        messages.writeFrame.channels[1].data_count = 55;
+        messages.writeFrame.channels[2].data_count = 55;
+        pb_ostream_t stream = pb_ostream_from_buffer(buffers.any, sizeof(buffers));
+        if (!pb_encode(&stream, WriteFrame_fields, &messages.writeFrame)) {
+          Serial.println("Failed to encode WriteFrame");
+          accelStreamProblem = true;
+          delaySafe();
+          return;
+        }
+        if (!webSocket.sendBIN(buffers.any, stream.bytes_written)) {
+          Serial.println("Failed to send WriteFrame");
+          accelStreamProblem = true;
+          delaySafe();
+          return;
+        }
+        accelSamplesSent += 55;
+      }
+    }
+    /*
+    int64_t timestamp;
+    if (accelReadValues(
+        messageWriteFrame.channels[0].data,
+        messageWriteFrame.channels[1].data,
+        messageWriteFrame.channels[2].data,
+        55,
+        accelStreamOpen ? NULL : &timestamp)) {
+      if (!accelStreamOpen) {
+        
+      }
+      // Send frame
+      // ...
+    }*/
+  }
+/*
   // Routine to submit test stream
   // if moredata...
   if (testStreamProblem) {
@@ -700,17 +859,17 @@ void loop() {
     }
     samplesSent += 110;
   }
+  */
 
   // Clock down when we're done!
   clockDown();
   delayReset();
 
   /*
-  accelRead();
-  */
   if (accelReads % 110 == 0) {
     Serial.println(accelReads);
   }
+  */
 }
 
 /* end of file */
