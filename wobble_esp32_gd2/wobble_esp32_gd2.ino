@@ -403,13 +403,15 @@ void loop() {
     messages.openStream.info.bits = 13;
     messages.openStream.info.timestamp = lastTestStreamTimestamp; // Should use the timestamp that was set when the sensor fifo was cleared
     strcpy(messages.openStream.info.description, "Test Stream");
-    messages.openStream.info.channel_descriptions_count = 1;
+    messages.openStream.info.channel_descriptions_count = 2;
     strcpy(messages.openStream.info.channel_descriptions[0], "Test Channel 0");
+    strcpy(messages.openStream.info.channel_descriptions[1], "Test Channel 1");
     messages.openStream.info.timestamp_precision = 1000000; // 1s
     messages.openStream.info.sensor = SensorType_ACCELEROMETER;
     strcpy(messages.openStream.info.hardware, "TestHW");
     messages.openStream.info.unit = Unit_G;
     messages.openStream.info.scale = 2.5f;
+    messages.openStream.info.zoom = 10.0f;
     messages.openStream.info.latitude = latitude;
     messages.openStream.info.longitude = longitude;
     pb_ostream_t stream = pb_ostream_from_buffer(buffers.any, sizeof(buffers));

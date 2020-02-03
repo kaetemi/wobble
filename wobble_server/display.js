@@ -2,6 +2,7 @@
 
 // Reference:
 // https://javascript.info/websocket
+// https://www.w3schools.com/jsref/met_table_insertrow.asp
 
 const wobbleProtocolDescriptor = require("./wobble_protocol.json");
 const wobbleProtocol = protobuf.Root.fromJSON(wobbleProtocolDescriptor);
@@ -25,7 +26,12 @@ let createWs;
 
 let safeTimeout = 10;
 
-let streams = { };
+let streams = {};
+
+let listTable = document.getElementById("list");
+let displayTable = document.getElementById("display");
+
+let statusLabel = document.getElementById("status");
 
 function delaySafe(maxTimeout) {
     if (safeTimeout < maxTimeout || 1000) {
@@ -39,6 +45,24 @@ function subscribeStreamList() {
         messageType: MessageType.SUBSCRIBE_STREAM_LIST,
     };
     let buffer = SubscribeStreamList.encode(message).finish();
+    ws.send(buffer);
+}
+
+function subscribe(name) {
+    let message = {
+        messageType: MessageType.SUBSCRIBE,
+        name: name
+    };
+    let buffer = Subscribe.encode(message).finish();
+    ws.send(buffer);
+}
+
+function unsubscribe(name) {
+    let message = {
+        messageType: MessageType.UNSUBSCRIBE,
+        name: name
+    };
+    let buffer = Subscribe.encode(message).finish();
     ws.send(buffer);
 }
 
@@ -60,6 +84,11 @@ let units = [
 
 function publishStream(message) {
     // Fetch all useful data
+    if (!listTable) listTable = document.getElementById("list");
+    if (!message.info.channels) {
+        console.log("No channels");
+        return; // Useless
+    }
     let name = message.info.name;
     let description = message.info.description || message.info.name;
     let sensor = sensorTypes[message.info.sensor];
@@ -69,18 +98,87 @@ function publishStream(message) {
     for (let i = 0; i < message.info.channels; ++i) {
         channels[i] = message.info.channelDescriptions[i] || ("[" + i + "]");
     }
-    let rows = (streams[name] && streams[name].rows) || [];
+    let oldStream = streams[name];
+    let rows = oldStream ? streams[name].rows : [];
     let stream = {
         info: message.info,
         rows: rows,
+        subs: oldStream ? oldStream.subs : 0,
     };
     streams[name] = stream;
     for (let i = rows.length; i < channels.length; ++i) {
         // Add enough rows
-        rows.push(table.insertRow());
+        let row = listTable.insertRow();
+        let cells = [];
+        for (let j = 0; j < 7; ++j) {
+            cells.push(row.insertCell());
+        }
+        rows.push({
+            row: row,
+            cells: cells,
+            displayRow: null,
+            displayMinutes: null,
+            displaySeconds: null,
+        });
     }
     // Update all rows
-    // ....
+    rows[0].cells[0].innerHTML = description;
+    rows[0].cells[1].innerHTML = sensor;
+    rows[0].cells[2].innerHTML = hardware;
+    rows[0].cells[3].innerHTML = unit;
+    for (let i = 0; i < channels.length; ++i) {
+        rows[i].cells[4].innerHTML = channels[i];
+        rows[i].cells[5].innerHTML = `<button onclick="displayStreamChannel('${name}', ${i})">Display</button>`;
+    }
+    // Resub
+    if (oldStream && oldStream.resub) {
+        subscribe(name);
+    }
+}
+
+function displayStreamChannel(name, channel) {
+    if (!displayTable) displayTable = document.getElementById("display");
+    let stream = streams[name];
+    let row = stream.rows[channel];
+    if (row.displayRow) {
+        // Unsubscribe
+        --stream.subs;
+        if (!stream.subs) {
+            unsubscribe(name);
+        }
+        row.displayRow.remove();
+        row.displayRow = null;
+        row.displayMinutes = null;
+        row.displaySeconds = null;
+    } else {
+        // Subscribe
+        row.displayRow = displayTable.insertRow();
+        row.displayMinutes = row.displayRow.insertCell();
+        row.displaySeconds = row.displayRow.insertCell();
+        // Create canvas
+        if (!stream.subs) {
+            subscribe(name);
+        }
+        ++stream.subs;
+    }
+} displayStreamChannel;
+
+function publishFrame(message) {
+    console.log(message);
+    if (!listTable) listTable = document.getElementById("list");
+    if (!displayTable) displayTable = document.getElementById("display");
+    let name = message.name;
+    let stream = streams[name];
+    let rows = stream.rows;
+    for (let ch = 0; ch < stream.rows.length; ++ch) {
+        if (rows[ch].displayRow) {
+            let listRow = rows[ch].row;
+            listRow.cells[6].innerHTML = message.timestamp.toString();
+            let displayMinutes = rows[ch].displayMinutes;
+            let displaySeconds = rows[ch].displaySeconds;
+            // ...
+        }
+    }
 }
 
 function delayReset() {
@@ -89,10 +187,20 @@ function delayReset() {
 
 function connected() {
     subscribeStreamList();
+    if (!statusLabel) statusLabel = document.getElementById("status");
+    statusLabel.innerHTML = "Connected";
+    // Resubscribe to existing graphs
+    for (let k in streams) {
+        let stream = streams[k];
+        if (stream.subs) {
+            stream.resub = true;
+        }
+    }
 }
 
 function disconnected() {
-    // ...
+    if (!statusLabel) statusLabel = document.getElementById("status");
+    statusLabel.innerHTML = "Disconnected";
 }
 
 createWs = function () {
@@ -109,7 +217,7 @@ createWs = function () {
         // console.log(`[message] Data received from server: ${event.data}`);
         // console.log(event);
         let buffer = new Uint8Array(event.data);
-        console.log(buffer);
+        // console.log(buffer);
         let undefinedMessage = UndefinedMessage.decode(buffer);
         if (undefinedMessage.messageType != MessageType.PUBLISH_FRAME
             && undefinedMessage.messageType != MessageType.RESULT_FRAME) {
@@ -121,6 +229,12 @@ createWs = function () {
                 let message = PublishStream.decode(buffer);
                 console.log(message);
                 publishStream(message);
+                break;
+            }
+            case MessageType.PUBLISH_FRAME: {
+                let message = PublishFrame.decode(buffer);
+                // console.log(message);
+                publishFrame(message);
                 break;
             }
         }

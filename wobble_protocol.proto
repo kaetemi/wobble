@@ -60,6 +60,7 @@ message StreamInfo {
     string hardware = 26 [(nanopb).max_size = 64]; // chip identifier, etc.
     Unit unit = 27;
     float scale = 28; // scale in units over the positive bit range
+    float zoom = 29; // how much to zoom
     double latitude = 23;
     double longitude = 24;
 

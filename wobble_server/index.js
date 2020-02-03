@@ -104,7 +104,8 @@ function processQueueEntry() {
         break;
     }
     if (!file) {
-        return; // done
+        console.log("No more files remaining to compress");
+        return; // Done
     }
     delete compressQueue[file];
     console.log("Compress " + file);
@@ -349,7 +350,7 @@ wss.on('connection', function connection(ws) {
             }
             case MessageType.SUBSCRIBE: {
                 let subscribe = Subscribe.decode(buffer);
-                console.log(subscibe);
+                console.log(subscribe);
                 let name = subscribe.name;
                 if (!streams[name]) {
                     break; // Bad name
@@ -360,8 +361,8 @@ wss.on('connection', function connection(ws) {
             }
             case MessageType.UNSUBSCRIBE: {
                 let unsubscribe = Unsubscribe.decode(buffer);
-                console.log(unsubscibe);
-                let name = unsubscibe.name;
+                console.log(unsubscribe);
+                let name = unsubscribe.name;
                 if (!streams[name]) {
                     break; // Bad name
                 }

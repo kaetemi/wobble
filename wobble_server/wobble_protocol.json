@@ -88,6 +88,10 @@
           "type": "float",
           "id": 28
         },
+        "zoom": {
+          "type": "float",
+          "id": 29
+        },
         "latitude": {
           "type": "double",
           "id": 23
