@@ -3,6 +3,8 @@
  * Wobble.
  */
 
+#define CS_PIN 15
+
 // Boards Manager URLs:
 // https://dl.espressif.com/dl/package_esp32_index.json (esp32)
 // https://arduino.esp8266.com/stable/package_esp8266com_index.json (esp8266)
@@ -23,6 +25,8 @@
 // https://lastminuteengineers.com/handling-esp32-gpio-interrupts-tutorial/
 // https://esp32.com/viewtopic.php?t=9289
 // https://www.circuito.io/app?components=513,360217,1671987
+// https://github.com/stm32duino/LIS3DHH/blob/master/src/lis3dhh_reg.h
+// https://www.st.com/content/ccc/resource/technical/document/application_note/group0/b5/5a/15/58/aa/82/44/e8/DM00477046/files/DM00477046.pdf/jcr:content/translations/en.DM00477046.pdf
 
 #ifdef ESP32
 #include <esp32-hal-cpu.h>
@@ -46,6 +50,9 @@
 #include <pb.h>
 #include <pb_encode.h>
 
+#include <SPI.h>
+#include <LIS3DHHSensor.h>
+
 #include "wobble_protocol.pb.h"
 #include "wifi_setup.h"
 
@@ -58,6 +65,8 @@ WiFiUDP ntpUDP;
 NTPClient timeClient(ntpUDP); // ntpUDP, "europe.pool.ntp.org", 3600, 60000
 
 WebSocketsClient webSocket;
+
+LIS3DHHSensor sensor(&SPI, CS_PIN);
 
 const unsigned long ntpRefresh = 4 * 60000;
 unsigned long ntpLast = 0;
@@ -79,6 +88,8 @@ bool testStreamOpen = false;
 bool testStreamProblem = false;
 int64_t lastTestStreamTimestamp = 0;
 int32_t samplesSent = 0;
+
+bool sensorChecked = false;
 
 union {
   OpenStream openStream;
@@ -107,6 +118,8 @@ void setup() {
     clockedUp = true;
   } */
 #endif
+
+  SPI.begin();
 }
 
 void delaySafe(int32_t maxTimeout = 1000) {
@@ -382,6 +395,61 @@ void loop() {
     return;
   }
 
+  // Check sensor
+  if (!sensorChecked) {
+    LIS3DHHStatusTypeDef res;
+    clockUp();
+
+    // Check ID
+    Serial.println();
+    Serial.print("Sensor ID: ");
+    uint8_t id;
+    res = sensor.ReadID(&id);
+    Serial.println(id);
+    if (res != LIS3DHH_STATUS_OK || id != 17) {
+      Serial.println("Not OK!");
+      delaySafe();
+      return;
+    }
+
+    // Write settings
+    lis3dhh_reg_t reg;
+    // ctrl_reg1, int1_ctrl, int2_ctrl, ctrl_reg4, ctrl_reg5, status, fifo_ctrl, fifo_src
+    
+    // Enable FIFO
+    reg.byte = 0;
+    reg.fifo_ctrl.fth = 12; // Threshold 12 / 32 fifo samples
+    reg.fifo_ctrl.fmode = LIS3DHH_FIFO_MODE;
+    res = sensor.WriteReg(LIS3DHH_FIFO_CTRL, reg.byte);
+    if (res != LIS3DHH_STATUS_OK) { Serial.println("Failed WriteReg LIS3DHH_FIFO_CTRL!"); delaySafe(); return; }
+
+    reg.byte = 0;
+    reg.ctrl_reg4.not_used_01 = 1; // Must be 1
+    reg.ctrl_reg4.fifo_en = 1; // Enable FIFO
+    // dsp = 0 (440Hz bw), st = 0 (235Hz bw)
+    res = sensor.WriteReg(LIS3DHH_CTRL_REG4, reg.byte);
+    if (res != LIS3DHH_STATUS_OK) { Serial.println("Failed WriteReg LIS3DHH_CTRL_REG4!"); delaySafe(); return; }
+    
+    // Enable INT1 on FIFO threshold reached
+    reg.byte = 0;
+    reg.int1_ctrl.int1_fth = 1;
+    res = sensor.WriteReg(LIS3DHH_INT1_CTRL, reg.byte);
+    if (res != LIS3DHH_STATUS_OK) { Serial.println("Failed WriteReg LIS3DHH_INT1_CTRL!"); delaySafe(); return; }
+
+    // Enable Accelerometer
+    res = sensor.Enable_X();
+    if (res != LIS3DHH_STATUS_OK) { Serial.println("Failed Enable_X!"); delaySafe(); return; }
+
+    // Test
+    // int16_t sample[3];
+    // res = sensor.Get_X_AxesRaw(sample);
+
+    // OK!
+    Serial.println("OK!");
+    Serial.println();
+    sensorChecked = true; // After this, only access sensor from interrupt!
+  }
+
   // Routine to submit test stream
   // if moredata...
   if (testStreamProblem) {
@@ -394,9 +462,9 @@ void loop() {
     lastTestStreamTimestamp = currentTimestamp();
     messages.openStream = (OpenStream)OpenStream_init_zero;
     messages.openStream.message_type = MessageType_OPEN_STREAM;
-    strcpy(messages.openStream.password, "teststreampwd");
+    strcpy(messages.openStream.password, accelPassword);
     messages.openStream.has_info = true;
-    strcpy(messages.openStream.info.name, "teststreamname");
+    strcpy(messages.openStream.info.name, accelName);
     messages.openStream.alias = testStreamAlias;
     messages.openStream.info.channels = 3;
     messages.openStream.info.frequency = 1100;
