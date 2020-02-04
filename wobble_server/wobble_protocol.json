@@ -92,6 +92,14 @@
           "type": "float",
           "id": 29
         },
+        "zero": {
+          "rule": "repeated",
+          "type": "int32",
+          "id": 30,
+          "options": {
+            "(nanopb).max_count": 4
+          }
+        },
         "latitude": {
           "type": "double",
           "id": 23

@@ -96,6 +96,7 @@ function publishStream(message) {
     let sensor = sensorTypes[message.info.sensor];
     let hardware = message.info.hardware;
     let unit = units[message.info.unit];
+    let rate = message.info.frequency;
     let channels = [];
     for (let i = 0; i < message.info.channels; ++i) {
         channels[i] = message.info.channelDescriptions[i] || ("[" + i + "]");
@@ -112,7 +113,7 @@ function publishStream(message) {
         // Add enough rows
         let row = listTable.insertRow();
         let cells = [];
-        for (let j = 0; j < 7; ++j) {
+        for (let j = 0; j < 8; ++j) {
             cells.push(row.insertCell());
         }
         rows.push({
@@ -131,9 +132,10 @@ function publishStream(message) {
     rows[0].cells[1].innerHTML = sensor;
     rows[0].cells[2].innerHTML = hardware;
     rows[0].cells[3].innerHTML = unit;
+    rows[0].cells[4].innerHTML = rate + " Hz";
     for (let i = 0; i < channels.length; ++i) {
-        rows[i].cells[4].innerHTML = channels[i];
-        rows[i].cells[5].innerHTML = `<button onclick="displayStreamChannel('${name}', ${i})">Display</button>`;
+        rows[i].cells[5].innerHTML = channels[i];
+        rows[i].cells[6].innerHTML = `<button onclick="displayStreamChannel('${name}', ${i})">Display</button>`;
     }
     // Resub
     if (oldStream && oldStream.resub) {
@@ -198,6 +200,7 @@ function publishFrame(message) {
             var ctxSec = displaySeconds.getContext("2d");
             let width = 768;
             let height = 128;
+            let zero = ~~stream.info.zero[ch];
             if (cache.displayedSamples) {
                 // TODO: Shift image left when timestamp skips
                 // Shift image left by new samples
@@ -211,18 +214,18 @@ function publishFrame(message) {
             ctxSec.fillRect(width - data.length, 0, data.length, height);
             ctxSec.beginPath();
             if (cache.lastSample != null) {
-                ctxSec.moveTo(width - data.length - 1, (height / 2) + cache.lastSample * 0.001);
+                ctxSec.moveTo(width - data.length - 1, (height / 2) - (cache.lastSample - zero) * 0.1);
             }
             for (let i = 0; i < data.length; ++i) {
                 // TODO: Proper scaling etc
                 let x = width - data.length + i;
-                let y = (height / 2) + data[i] * 0.001;
+                let y = (height / 2) - (data[i] - zero) * 0.1;
                 if (cache.lastSample == null && i == 0) ctxSec.moveTo(x, y);
                 else ctxSec.lineTo(x, y);
             }
             ctxSec.stroke();
             cache.lastSample = data[data.length - 1];
-            listRow.cells[6].innerHTML = message.timestamp.toString() + ' ' + cache.lastSample;
+            listRow.cells[7].innerHTML = message.timestamp.toString() + ' ' + cache.lastSample;
         }
     }
 }

@@ -108,8 +108,12 @@ int16_t accelX[ACCEL_BUFFER_SZ], accelY[ACCEL_BUFFER_SZ], accelZ[ACCEL_BUFFER_SZ
 int16_t accelRd = 0, accelWr = 0;
 int16_t accelRefWr = 0;
 int64_t accelRefTs = 0, accelNextTs = 0;
-int accelReads = 0;
+int32_t accelRefReads = 0, accelNextReads = 0;
+int32_t accelReads = 0;
 int32_t accelSamplesSent = 0;
+int32_t accelFreq = 1100; // auto adjust by drift
+int64_t accelOpenTs = 0;
+int32_t accelOpenReads = 0;
 os_timer_t accelTimer;
 
 void delaySafe(int32_t maxTimeout = 1000) {
@@ -128,6 +132,7 @@ void accelReset() {
   accelWr = 0;
   accelRefWr = 0;
   accelRefTs = 0;
+  accelRefReads = 0;
 }
 
 // Called from timer
@@ -160,6 +165,7 @@ void ICACHE_RAM_ATTR accelPushValue(int16_t x, int16_t y, int16_t z, int i) {
     // Store the next batch timestamp when done processing this fifo.
     accelRefWr = wr;
     accelRefTs = ts;
+    accelRefReads = accelNextReads;
     accelNextTs = 0;
     if (!accelStreamOpen) {
       accelRd = wr; // Skip ahead
@@ -190,7 +196,7 @@ bool accelOpenOrPublish(int count) {
 }
 
 // Called from main function
-bool accelReadValues(int32_t *x, int32_t *y, int32_t *z, int count, int64_t *timestamp) {
+bool accelReadValues(int32_t *x, int32_t *y, int32_t *z, int count, int64_t *timestamp = NULL, int32_t *reads = NULL) {
   // if (!accelStreamOpen) return false;
   if (accelStreamProblem) return false;
   // Only set timestamp if a timestamp is wanted
@@ -206,7 +212,10 @@ bool accelReadValues(int32_t *x, int32_t *y, int32_t *z, int count, int64_t *tim
       // Don't have a valid timestamp currently
       return false;
     }
-    *timestamp = accelRefTs;
+    *timestamp = refTs;
+    if (reads) {
+      *reads = accelRefReads;
+    }
   }
   if (count >= written) {
     // Don't have enough values currently
@@ -370,7 +379,8 @@ void webSocketEvent(WStype_t type, uint8_t *payload, size_t length) {
 }
 
 void ICACHE_RAM_ATTR accelRead(void *) {
-  int64_t nextTs = currentTimestampNoAdj();
+  int64_t nextTs = currentTimestamp();
+  int32_t nextReads = accelReads;
   LIS3DHHStatusTypeDef res;
   lis3dhh_reg_t reg;
   reg.byte = 0;
@@ -389,7 +399,9 @@ void ICACHE_RAM_ATTR accelRead(void *) {
       res = sensor->Get_X_AxesRaw(sample);
       accelPushValue(sample[0], sample[1], sample[2], i);
       if (accelReads % 1100 == 0) {
-        digitalWrite(LED_BUILTIN, LOW); // Turn on LED
+        if (accelStreamOpen) {
+          digitalWrite(LED_BUILTIN, LOW); // Turn on LED
+        }
       } else if (accelReads % 1100 == 55) {
         digitalWrite(LED_BUILTIN, HIGH); // Turn off LED
       }
@@ -401,6 +413,7 @@ void ICACHE_RAM_ATTR accelRead(void *) {
       }
   }
   accelNextTs = nextTs;
+  accelNextReads = nextReads;
 }
 
 void loop() {
@@ -511,7 +524,7 @@ void loop() {
     timestamp = (timestamp + currentTimestamp()) >> 1; // Average before and after
     int64_t timestampDrift = abs(ntpTimestamp - timestamp);
     if (timestampDrift > 1100000) { // Needs to stay within 1.1s drift
-      Serial.println("Drift, retime");
+      Serial.println("Drift on clock, retime");
       Serial.print("Timestamp: ");
       Serial.println(PriUint64<DEC>(timestamp));
       Serial.print("NTP Timestamp: ");
@@ -519,7 +532,7 @@ void loop() {
       Serial.print("Drift: ");
       Serial.println(PriUint64<DEC>(timestampDrift));
       timeReady = false;
-      // // TODO: Close all streams EDIT: No need, only close streams when sensor frequency drifts!
+      // TODO: Close temperature stream, since it follows the clock
       return;
     }
   }
@@ -689,9 +702,14 @@ void loop() {
     clockUp();
     if (!accelStreamOpen) {
       int64_t timestamp;
-      if (accelReadValues(NULL, NULL, NULL, 0, &timestamp)) {
+      int32_t reads;
+      if (accelReadValues(NULL, NULL, NULL, 0, &timestamp, &reads)) {
         Serial.print("Open accelerometer stream at ");
-        Serial.println(PriUint64<DEC>(timestamp));
+        Serial.print(PriUint64<DEC>(timestamp));
+        Serial.print(", ");
+        Serial.println(reads);
+        accelOpenTs = timestamp;
+        accelOpenReads = reads;
         messages.openStream = (OpenStream)OpenStream_init_zero;
         messages.openStream.message_type = MessageType_OPEN_STREAM;
         strcpy(messages.openStream.password, accelPassword);
@@ -699,8 +717,8 @@ void loop() {
         strcpy(messages.openStream.info.name, accelName);
         messages.openStream.alias = accelStreamAlias;
         messages.openStream.info.channels = 3;
-        messages.openStream.info.frequency = 1100;
-        messages.openStream.info.bits = 13;
+        messages.openStream.info.frequency = accelFreq;
+        messages.openStream.info.bits = 16;
         messages.openStream.info.timestamp = timestamp; // Should use the timestamp that was set when the sensor fifo was cleared
         strcpy(messages.openStream.info.description, accelDescription);
         messages.openStream.info.channel_descriptions_count = 3;
@@ -712,7 +730,11 @@ void loop() {
         strcpy(messages.openStream.info.hardware, "LIS3DHH");
         messages.openStream.info.unit = Unit_G;
         messages.openStream.info.scale = 2.5f;
-        messages.openStream.info.zoom = 10.0f;
+        messages.openStream.info.zoom = 128.0f;
+        messages.openStream.info.zero_count = 3;
+        messages.openStream.info.zero[0] = 0;
+        messages.openStream.info.zero[1] = 0;
+        messages.openStream.info.zero[2] = 13107; // 1g
         messages.openStream.info.latitude = latitude;
         messages.openStream.info.longitude = longitude;
         pb_ostream_t stream = pb_ostream_from_buffer(buffers.any, sizeof(buffers));
@@ -759,117 +781,30 @@ void loop() {
         }
         accelSamplesSent += 55;
       }
-    }
-    /*
-    int64_t timestamp;
-    if (accelReadValues(
-        messageWriteFrame.channels[0].data,
-        messageWriteFrame.channels[1].data,
-        messageWriteFrame.channels[2].data,
-        55,
-        accelStreamOpen ? NULL : &timestamp)) {
-      if (!accelStreamOpen) {
-        
-      }
-      // Send frame
-      // ...
-    }*/
-  }
-/*
-  // Routine to submit test stream
-  // if moredata...
-  if (testStreamProblem) {
-    // TODO: Close stream
-    clockUp();
-  }
-  if (!testStreamOpen) {
-    clockUp();
-    Serial.println("Open test stream");
-    lastTestStreamTimestamp = currentTimestamp();
-    messages.openStream = (OpenStream)OpenStream_init_zero;
-    messages.openStream.message_type = MessageType_OPEN_STREAM;
-    strcpy(messages.openStream.password, accelPassword);
-    messages.openStream.has_info = true;
-    strcpy(messages.openStream.info.name, accelName);
-    messages.openStream.alias = testStreamAlias;
-    messages.openStream.info.channels = 3;
-    messages.openStream.info.frequency = 1100;
-    messages.openStream.info.bits = 13;
-    messages.openStream.info.timestamp = lastTestStreamTimestamp; // Should use the timestamp that was set when the sensor fifo was cleared
-    strcpy(messages.openStream.info.description, accelDescription);
-    messages.openStream.info.channel_descriptions_count = 3;
-    strcpy(messages.openStream.info.channel_descriptions[0], "X");
-    strcpy(messages.openStream.info.channel_descriptions[1], "Y");
-    strcpy(messages.openStream.info.channel_descriptions[2], "Z");
-    messages.openStream.info.timestamp_precision = 1000000; // 1s
-    messages.openStream.info.sensor = SensorType_ACCELEROMETER;
-    strcpy(messages.openStream.info.hardware, "LIS3DHH");
-    messages.openStream.info.unit = Unit_G;
-    messages.openStream.info.scale = 2.5f;
-    messages.openStream.info.zoom = 10.0f;
-    messages.openStream.info.latitude = latitude;
-    messages.openStream.info.longitude = longitude;
-    pb_ostream_t stream = pb_ostream_from_buffer(buffers.any, sizeof(buffers));
-    if (!pb_encode(&stream, OpenStream_fields, &messages.openStream)) {
-      Serial.println("Failed to encode OpenStream");
-      delaySafe();
-      return;
-    }
-    if (!webSocket.sendBIN(buffers.any, stream.bytes_written)) {
-      Serial.println("Failed to send OpenStream");
-      delaySafe();
-      return;
-    }
-    testStreamOpen = true;
-    testStreamProblem = false;
-    samplesSent = 0;
-    // freq 11000, send 1100 samples each 100ms
-    // cut stream every minute for testing purposes
-  }
-  if (testStreamOpen) {
-    uint64_t timestamp = currentTimestamp();
-    if (lastTestStreamTimestamp - timestamp >= 100000) {
-      clockUp();
-      lastTestStreamTimestamp += 100000;
-      messages.writeFrame = (WriteFrame)WriteFrame_init_zero;
-      messages.writeFrame.message_type = MessageType_WRITE_FRAME;
-      messages.writeFrame.alias = testStreamAlias;
-      messages.writeFrame.channels_count = 3;
-      messages.writeFrame.channels[0].data_count = 110;
-      messages.writeFrame.channels[1].data_count = 110;
-      messages.writeFrame.channels[2].data_count = 110;
-      for (int i = 0; i < 110; ++i) {
-        messages.writeFrame.channels[0].data[i] = i * 100;
-        messages.writeFrame.channels[1].data[i] = -i * 100;
-        messages.writeFrame.channels[2].data[i] = -i & 0xF * 1000;
-      }
-      pb_ostream_t stream = pb_ostream_from_buffer(buffers.any, sizeof(buffers));
-      if (!pb_encode(&stream, WriteFrame_fields, &messages.writeFrame)) {
-        Serial.println("Failed to encode WriteFrame");
-        testStreamProblem = true;
-        delaySafe();
-        return;
-      }
-      if (!webSocket.sendBIN(buffers.any, stream.bytes_written)) {
-        Serial.println("Failed to send WriteFrame");
-        testStreamProblem = true;
-        delaySafe();
+      
+      // Check for drift on the sensor timing
+      int64_t streamReads = (int64_t)accelRefReads - (int64_t)accelOpenReads;
+      int64_t calcTimestamp = accelOpenTs + (1000000LL * streamReads / accelFreq);
+      int64_t refTimestamp = accelRefTs;
+      int64_t timestampDrift = abs(calcTimestamp - refTimestamp);
+      if (timestampDrift > 1100000) { // Needs to stay within 1.1s drift
+        Serial.println("Drift on sensor timing, retime");
+        Serial.print("Current frequency: ");
+        Serial.println(accelFreq);
+        int64_t streamTime = refTimestamp - accelOpenTs;
+        int64_t nextFreq = streamReads * 1000000LL / streamTime;
+        Serial.print("Next frequency: ");
+        Serial.println((int32_t)nextFreq);
+        accelFreq = nextFreq;
+        accelStreamProblem = true;
         return;
       }
     }
-    samplesSent += 110;
   }
-  */
 
   // Clock down when we're done!
   clockDown();
   delayReset();
-
-  /*
-  if (accelReads % 110 == 0) {
-    Serial.println(accelReads);
-  }
-  */
 }
 
 /* end of file */

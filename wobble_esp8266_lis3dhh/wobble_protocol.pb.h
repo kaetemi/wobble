@@ -88,6 +88,8 @@ typedef struct _StreamInfo {
     Unit unit;
     float scale;
     float zoom;
+    pb_size_t zero_count;
+    int32_t zero[4];
 } StreamInfo;
 
 typedef struct _Subscribe {
@@ -155,7 +157,7 @@ typedef struct _WriteFrame {
 
 /* Initializer values for message structs */
 #define UndefinedMessage_init_default            {_MessageType_MIN}
-#define StreamInfo_init_default                  {"", 0, 0, 0, 0, "", 0, {"", "", "", ""}, 0, 0, 0, _SensorType_MIN, "", _Unit_MIN, 0, 0}
+#define StreamInfo_init_default                  {"", 0, 0, 0, 0, "", 0, {"", "", "", ""}, 0, 0, 0, _SensorType_MIN, "", _Unit_MIN, 0, 0, 0, {0, 0, 0, 0}}
 #define OpenStream_init_default                  {_MessageType_MIN, "", 0, false, StreamInfo_init_default}
 #define ChannelData_init_default                 {0, {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}}
 #define WriteFrame_init_default                  {_MessageType_MIN, 0, 0, {ChannelData_init_default, ChannelData_init_default, ChannelData_init_default, ChannelData_init_default}}
@@ -169,7 +171,7 @@ typedef struct _WriteFrame {
 #define QueryCache_init_default                  {_MessageType_MIN, ""}
 #define ResultDone_init_default                  {_MessageType_MIN, ""}
 #define UndefinedMessage_init_zero               {_MessageType_MIN}
-#define StreamInfo_init_zero                     {"", 0, 0, 0, 0, "", 0, {"", "", "", ""}, 0, 0, 0, _SensorType_MIN, "", _Unit_MIN, 0, 0}
+#define StreamInfo_init_zero                     {"", 0, 0, 0, 0, "", 0, {"", "", "", ""}, 0, 0, 0, _SensorType_MIN, "", _Unit_MIN, 0, 0, 0, {0, 0, 0, 0}}
 #define OpenStream_init_zero                     {_MessageType_MIN, "", 0, false, StreamInfo_init_zero}
 #define ChannelData_init_zero                    {0, {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}}
 #define WriteFrame_init_zero                     {_MessageType_MIN, 0, 0, {ChannelData_init_zero, ChannelData_init_zero, ChannelData_init_zero, ChannelData_init_zero}}
@@ -206,6 +208,7 @@ typedef struct _WriteFrame {
 #define StreamInfo_unit_tag                      27
 #define StreamInfo_scale_tag                     28
 #define StreamInfo_zoom_tag                      29
+#define StreamInfo_zero_tag                      30
 #define StreamInfo_latitude_tag                  23
 #define StreamInfo_longitude_tag                 24
 #define StreamInfo_description_tag               14
@@ -252,7 +255,8 @@ X(a, STATIC,   SINGULAR, UENUM,    sensor,           25) \
 X(a, STATIC,   SINGULAR, STRING,   hardware,         26) \
 X(a, STATIC,   SINGULAR, UENUM,    unit,             27) \
 X(a, STATIC,   SINGULAR, FLOAT,    scale,            28) \
-X(a, STATIC,   SINGULAR, FLOAT,    zoom,             29)
+X(a, STATIC,   SINGULAR, FLOAT,    zoom,             29) \
+X(a, STATIC,   REPEATED, INT32,    zero,             30)
 #define StreamInfo_CALLBACK NULL
 #define StreamInfo_DEFAULT NULL
 
@@ -371,13 +375,13 @@ extern const pb_msgdesc_t ResultDone_msg;
 
 /* Maximum encoded size of messages (where known) */
 #define UndefinedMessage_size                    2
-#define StreamInfo_size                          550
-#define OpenStream_size                          632
+#define StreamInfo_size                          598
+#define OpenStream_size                          680
 #define ChannelData_size                         2816
 #define WriteFrame_size                          11293
 #define CloseStream_size                         13
 #define SubscribeStreamList_size                 2
-#define PublishStream_size                       556
+#define PublishStream_size                       604
 #define Subscribe_size                           67
 #define Unsubscribe_size                         67
 #define PublishFrame_size                        11370
