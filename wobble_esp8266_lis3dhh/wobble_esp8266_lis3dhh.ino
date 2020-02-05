@@ -127,7 +127,7 @@ int32_t samplesSent = 0;
 
 bool sensorChecked = false;
 
-#define ACCEL_BUFFER_SZ 2048
+#define ACCEL_BUFFER_SZ 4096
 #define ACCEL_BUFFER_MASK (ACCEL_BUFFER_SZ - 1)
 #define ACCEL_SAMPLE_BLOCK 55
 const int accelStreamAlias = 2;

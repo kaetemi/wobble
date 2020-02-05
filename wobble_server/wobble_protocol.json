@@ -156,7 +156,7 @@
           "type": "int32",
           "id": 12,
           "options": {
-            "(nanopb).max_count": 128
+            "(nanopb).max_count": 64
           }
         }
       }
