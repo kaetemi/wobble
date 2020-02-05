@@ -7,5 +7,5 @@
     "mirrorFrom": [
         "wss://wobble.kaetemi.be"
     ],
-    "storage": "./"
+    "storage": "./record/"
 }

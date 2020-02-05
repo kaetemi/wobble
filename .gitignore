@@ -6,3 +6,5 @@
 /wobble_server/*.wav
 /wobble_server/*.flac
 /wobble_esp8266_lis3dhh/wifi_setup.h
+/wobble_server/record/*.wav
+/wobble_server/record/*.flac
