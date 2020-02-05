@@ -5,7 +5,11 @@
         }
     },
     "mirrorFrom": [
-        "wss://wobble.kaetemi.be"
+        {
+            "url: "wss://wobble.kaetemi.be"
+        }
     ],
-    "storage": "./record/"
+    "storage": "./record/",
+    "mirrorStorage": "./mirror/",
+    "mirrorStorageEnabled": false
 }

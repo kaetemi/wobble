@@ -68,6 +68,15 @@ function unsubscribe(name) {
     ws.send(buffer);
 }
 
+function queryCache(name) {
+    let message = {
+        messageType: MessageType.QUERY_CACHE,
+        name: name
+    };
+    let buffer = QueryCache.encode(message).finish();
+    ws.send(buffer);
+}
+
 let sensorTypes = [
     "Undefined",
 
@@ -157,7 +166,8 @@ function publishStream(message) {
             `<button onclick="displayStreamChannel('${name}', ${i})">Display</button> `
             + `<button onclick="zoomStreamChannel('${name}', ${i}, 2.0)">+</button>`
             + `<button onclick="zoomStreamChannel('${name}', ${i}, 0.5)">-</button>`
-            + `<button onclick="zoomStreamChannel('${name}', ${i}, 0.0, 1.0)">0</button>`;
+            + `<button onclick="zoomStreamChannel('${name}', ${i}, 0.0, 1.0)">0</button>`
+            + ((i == 0) ? ` <button onclick="replotStream('${name}')">Replot</button> `  : '');
         updateScale(name, i);
     }
     // Resub
@@ -236,15 +246,28 @@ function zoomStreamChannel(name, channel, multiplier, zoom) {
         cache.zoom *= multiplier;
     }
     updateScale(name, channel);
-}
+} zoomStreamChannel;
 
+function replotStream(name) {
+    const stream = streams[name];
+    const rows = stream.rows;
+    for (let ch = 0; ch < stream.rows.length; ++ch) {
+        if (rows[ch].displayRow) {
+            const displayMinutes = rows[ch].displayMinutes;
+            const ctxMin = displayMinutes.getContext("2d");
+            ctxMin.fillStyle = '#F0F0F0';
+            ctxMin.fillRect(0, 0, displayMinutes.width, displayMinutes.height);
+        }
+    }
+    queryCache(name);
+} replotStream;
+
+// Live frame
 function publishFrame(message) {
-    //console.log(message);
-    if (!listTable) listTable = document.getElementById("list");
-    if (!displayTable) displayTable = document.getElementById("display");
-    let name = message.name;
-    let stream = streams[name];
-    let rows = stream.rows;
+    // console.log(message);
+    const name = message.name;
+    const stream = streams[name];
+    const rows = stream.rows;
     for (let ch = 0; ch < stream.rows.length; ++ch) {
         if (rows[ch].displayRow) {
             const listRow = rows[ch].row;
@@ -258,25 +281,23 @@ function publishFrame(message) {
             const height = 128;
             const zero = ~~stream.info.zero[ch];
             const sampleScalar = height / Math.pow(2, stream.info.bits);
+            const factor = sampleScalar * cache.zoom;
             if (cache.displayedSamples) {
-                // TODO: Shift image left when timestamp skips
                 // Shift image left by new samples
                 ctxSec.drawImage(displaySeconds, -data.length, 0);
                 cache.displayedSamples += data.length;
             } else {
                 cache.displayedSamples = data.length;
             }
-            // ctxSec.lineWidth = 0.5;
             ctxSec.fillStyle = '#FFFFFF';
             ctxSec.fillRect(width - data.length, 0, data.length, height);
             ctxSec.beginPath();
             if (cache.lastSample != null) {
-                ctxSec.moveTo(width - data.length - 1, (height / 2) - (cache.lastSample - zero) * sampleScalar * cache.zoom);
+                ctxSec.moveTo(width - data.length - 1, (height / 2) - (cache.lastSample - zero) * factor);
             }
             for (let i = 0; i < data.length; ++i) {
-                // TODO: Proper scaling etc
                 const x = width - data.length + i;
-                const y = (height / 2) - (data[i] - zero) * sampleScalar * cache.zoom;
+                const y = (height / 2) - (data[i] - zero) * factor;
                 if (cache.lastSample == null && i == 0) ctxSec.moveTo(x, y);
                 else ctxSec.lineTo(x, y);
             }
@@ -286,7 +307,8 @@ function publishFrame(message) {
 
             const timestamp = parseFloat(message.timestamp.toString());
             if (!cache.lastTimestamp) {
-                cache.lastTimestamp = timestamp - 500000; // half a second per pixel
+                cache.lastTimestamp = timestamp - (timestamp % 500000) - 500000; // Half a second per pixel
+                console.log(cache.lastTimestamp);
             }
             const usPerSample = 1000000.0 / stream.info.frequency;
             const samplesPerPixel = stream.info.frequency / 2.0;
@@ -294,16 +316,65 @@ function publishFrame(message) {
             ctxMin.fillStyle = pixelFill;
             for (let i = 0; i < data.length; ++i) {
                 const ts = timestamp + (i * usPerSample);
-                if (ts >= cache.lastTimestamp + 500000) {
+                const tsr = ~~((ts - cache.lastTimestamp) / 500000);
+                if (tsr > 0) {
                     // Shift image by one pixel
-                    ctxMin.drawImage(displayMinutes, -1, 0);
+                    ctxMin.drawImage(displayMinutes, -tsr, 0);
                     ctxMin.fillStyle = '#FFFFFF';
-                    ctxMin.fillRect(width - 1, 0, 1, height);
+                    ctxMin.fillRect(width - tsr, 0, tsr, height);
                     ctxMin.fillStyle = pixelFill;
-                    cache.lastTimestamp = (cache.lastTimestamp + 500000);
+                    cache.lastTimestamp = (cache.lastTimestamp + (500000 * tsr));
                 }
-                const y = (height / 2) - (data[i] - zero) * sampleScalar * cache.zoom;
+                const y = (height / 2) - (data[i] - zero) * factor;
                 ctxMin.fillRect(width - 1, y, 1, 1);
+            }
+        }
+    }
+}
+
+// Frame from replot query
+function resultFrame(message) {
+    // console.log(message);
+    const name = message.name;
+    const stream = streams[name];
+    const rows = stream.rows;
+    for (let ch = 0; ch < stream.rows.length; ++ch) {
+        if (rows[ch].displayRow) {
+            const cache = rows[ch].cache;
+            const displayMinutes = rows[ch].displayMinutes;
+            const data = message.channels[ch].data;
+            const ctxMin = displayMinutes.getContext("2d");
+            const zero = ~~stream.info.zero[ch];
+            const width = 768;
+            const height = 128;
+            const sampleScalar = height / Math.pow(2, stream.info.bits);
+            const factor = sampleScalar * cache.zoom;
+            
+            const timestamp = parseFloat(message.timestamp.toString());
+            if (!cache.lastTimestamp) {
+                // cache.lastTimestamp = timestamp - (timestamp % 500000) + ((width - 1) * 500000); // Half a second per pixel
+                cache.lastTimestamp = timestamp - (timestamp % 500000) - 500000; // Half a second per pixel
+                console.log(cache.lastTimestamp);
+            }
+            const usPerSample = 1000000.0 / stream.info.frequency;
+            const samplesPerPixel = stream.info.frequency / 2.0;
+            const pixelFill = `rgba(0, 0, 0, ${Math.min(1.0, 64.0 / samplesPerPixel)})`;
+            ctxMin.fillStyle = pixelFill;
+            for (let i = 0; i < data.length; ++i) {
+                const ts = timestamp + (i * usPerSample);
+                let tsr = ~~((ts - cache.lastTimestamp) / 500000);
+                if (tsr > 0) {
+                    // Shift image by one pixel
+                    ctxMin.drawImage(displayMinutes, -tsr, 0);
+                    ctxMin.fillStyle = '#F0F0F0';
+                    ctxMin.fillRect(width - tsr, 0, tsr, height);
+                    ctxMin.fillStyle = pixelFill;
+                    cache.lastTimestamp = (cache.lastTimestamp + (500000 * tsr));
+                }
+                tsr = ~~((ts - cache.lastTimestamp) / 500000);
+                const x = width + tsr - 1;
+                const y = (height / 2) - (data[i] - zero) * factor;
+                ctxMin.fillRect(x, y, 1, 1);
             }
         }
     }
@@ -363,6 +434,12 @@ createWs = function () {
                 let message = PublishFrame.decode(buffer);
                 // console.log(message);
                 publishFrame(message);
+                break;
+            }
+            case MessageType.RESULT_FRAME: {
+                let message = PublishFrame.decode(buffer);
+                // console.log(message);
+                resultFrame(message);
                 break;
             }
         }

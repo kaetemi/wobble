@@ -235,11 +235,11 @@ wss.on('connection', function connection(ws) {
                     alias: openStream.alias,
                     receivedSamples: 0,
                     open: true,
-                    subscribed: oldStream && oldStream.subscribed || {}, // existing or blank
+                    subscribed: oldStream ? oldStream.subscribed : {}, // existing or blank
                     fileWriter: fileWriter,
                     bitDepth: ~~bitDepth, // bit depth for file writer, at least info.bits
                     byteDepth: ~~(bitDepth / 8),
-                    cache: [],
+                    cache: oldStream ? oldStream.cache : [],
                     resultDone: ResultDone.encode({
                         messageType: MessageType.RESULT_DONE,
                         name: openStream.info.name,
@@ -387,12 +387,13 @@ wss.on('connection', function connection(ws) {
             case MessageType.QUERY_CACHE: {
                 let queryCache = QueryCache.decode(buffer);
                 console.log(queryCache);
+                let name = queryCache.name;
                 let stream = streams[name];
                 if (!stream) {
                     break; // Bad name
                 }
                 for (let i = 0; i < stream.cache.length; ++i) {
-                    ws.send(stream.cache[i]);
+                    ws.send(stream.cache[i].frame);
                 }
                 ws.send(stream.resultDone);
             }
