@@ -214,7 +214,7 @@ wss.on('connection', function connection(ws) {
                 };
                 // Create new output file
                 let publishBuffer = PublishStream.encode(publishStream).finish();
-                let filePath = config.storage + name + "_" + openStream.info.timestamp + ".wav";
+                let filePath = config.storage + name.replace(/(\W+)/gi, '_') + "_" + openStream.info.timestamp + ".wav";
                 let bitDepth = openStream.info.bits > 16 ? 32 : (openStream.info.bits > 8 ? 16 : 8);
                 let fileWriter = new FileWriter(filePath, {
                     sampleRate: openStream.info.frequency,
