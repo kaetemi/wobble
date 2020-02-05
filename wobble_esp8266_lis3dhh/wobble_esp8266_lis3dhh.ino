@@ -720,7 +720,7 @@ void loop() {
         messages.openStream.info.channels = 3;
         messages.openStream.info.frequency = accelFreq;
         messages.openStream.info.bits = 16;
-        messages.openStream.info.timestamp = timestamp; // Should use the timestamp that was set when the sensor fifo was cleared
+        messages.openStream.info.timestamp = timestamp; // The timestamp that was set when the sensor fifo was cleared, so the timestamp of the first sample
         strcpy(messages.openStream.info.description, accelDescription);
         messages.openStream.info.channel_descriptions_count = 3;
         strcpy(messages.openStream.info.channel_descriptions[0], "X");
