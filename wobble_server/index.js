@@ -135,7 +135,7 @@ function processQueueEntry() {
     delete compressQueue[file];
     console.log("Compress " + file);
     let flacFile = file.substr(0, file.lastIndexOf('.wav')) + '.flac';
-    let child = childProcess.exec('ffmpeg -nostdin -y -i ' + config.storage + file + ' -compression_level 12 ' + config.storage + flacFile, {
+    let child = childProcess.exec('ffmpeg -nostdin -y -i ' + config.storage + file + ' ' + config.storage + flacFile, {
         maxBuffer: 1024 * 1024,
         encoding: 0
     });
