@@ -454,7 +454,7 @@ function delayReset() {
 function connected() {
     subscribeStreamList();
     if (!statusLabel) statusLabel = document.getElementById("status");
-    statusLabel.innerHTML = "Connected";
+    statusLabel.innerHTML = "🌋 Connected";
     // Resubscribe to existing graphs
     for (let k in streams) {
         let stream = streams[k];
@@ -466,7 +466,7 @@ function connected() {
 
 function disconnected() {
     if (!statusLabel) statusLabel = document.getElementById("status");
-    statusLabel.innerHTML = "Disconnected";
+    statusLabel.innerHTML = "🗻 Disconnected";
 }
 
 createWs = function () {
