@@ -797,13 +797,6 @@ void loop() {
         messages.writeFrame.channels[0].data_count = ACCEL_SAMPLE_BLOCK;
         messages.writeFrame.channels[1].data_count = ACCEL_SAMPLE_BLOCK;
         messages.writeFrame.channels[2].data_count = ACCEL_SAMPLE_BLOCK;
-        for (int i = ACCEL_SAMPLE_BLOCK - 1; i > 0; --i) {
-          // Delta encoding, difference between values, starting from the first
-          messages.writeFrame.channels[2].data[i] = 
-            messages.writeFrame.channels[2].data[i]
-            - messages.writeFrame.channels[2].data[i - i];
-        }
-        messages.writeFrame.channels[2].delta = true;
         pb_ostream_t stream = pb_ostream_from_buffer(buffers.any, sizeof(buffers));
         if (!pb_encode(&stream, WriteFrame_fields, &messages.writeFrame)) {
           Serial.println("Failed to encode WriteFrame");

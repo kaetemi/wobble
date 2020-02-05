@@ -103,8 +103,7 @@ message OpenStream {
 }
 
 message ChannelData {
-    bool delta = 31; // encode as difference between values, starting from the first, works only up to 30bits data
-    repeated sint32 data = 12 [(nanopb).max_count = 64];
+    repeated int32 data = 12 [(nanopb).max_count = 64];
 }
 
 // Write a frame to a stream
