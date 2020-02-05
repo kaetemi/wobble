@@ -121,7 +121,7 @@ function processQueueEntry() {
     });
     child.on('exit', function (code) {
         if (!code) {
-            fs.unlink(file, function () { });
+            fs.unlink(config.storage + file, function () { });
         }
         setImmediate(processQueueEntry);
     });

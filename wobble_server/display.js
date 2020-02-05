@@ -10,6 +10,7 @@ const wobbleProtocolDescriptor = require("./wobble_protocol.json");
 const wobbleProtocol = protobuf.Root.fromJSON(wobbleProtocolDescriptor);
 
 const MessageType = wobbleProtocol.MessageType;
+const Unit = wobbleProtocol.Unit;
 const UndefinedMessage = wobbleProtocol.lookupType("UndefinedMessage");
 const OpenStream = wobbleProtocol.lookupType("OpenStream");
 const WriteFrame = wobbleProtocol.lookupType("WriteFrame");
@@ -98,14 +99,52 @@ function updateScale(name, channel) {
     const rows = stream.rows;
     const row = rows[channel];
     const listRow = row.row;
+    console.log(row);
     const scaleCanvas = row.displayScale;
     const scaleCell = listRow.cells[7];
     const cache = row.cache;
     const zoom = cache.zoom;
     const scale = stream.info.scale / zoom;
+
     const unit = units[stream.info.unit];
     const scaleText = "±" + scale + unit;
     listRow.cells[7].innerHTML = scaleText;
+
+    const width = scaleCanvas.width;
+    const height = scaleCanvas.height;
+    const unitsToPixels = height * 0.5 * cache.zoom / stream.info.scale;
+
+    const ctx = scaleCanvas.getContext("2d");
+    const bgHeight = stream.info.scale * unitsToPixels * 2.0;
+    ctx.clearRect(0, 0, width, height);
+    ctx.fillStyle = '#FFFFFF';
+    ctx.fillRect(0, (height - bgHeight) * 0.5, width, bgHeight);
+
+    ctx.font = '11px serif';
+    if (stream.info.unit == Unit.G) {
+        // Draw quake scale
+        let scales = [
+            { value: 1.24, label: "IX" },
+            { value: 0.65, label: "VIII" },
+            { value: 0.34, label: "VII" },
+            { value: 0.18, label: "VI" },
+            { value: 0.092, label: "V" },
+            { value: 0.039, label: "IV" },
+            { value: 0.014, label: "II-III" },
+            // { value: 0.005, label: "II" }, // Verify this one!
+            { value: 0.0017, label: "I" },
+        ];
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.125)';
+        for (let i = 0; i < scales.length; ++i) {
+            const h = scales[i].value * unitsToPixels * 2.0;
+            ctx.fillRect(0, (height - h) * 0.5, width, h);
+        }
+        ctx.fillStyle = '#FFFFFF';
+        for (let i = 0; i < scales.length; ++i) {
+            const h = scales[i].value * unitsToPixels * 2.0;
+            ctx.fillText(scales[i].label, 0, (height - h) * 0.5,); 
+        }
+    }
 }
 
 function publishStream(message) {
@@ -162,13 +201,15 @@ function publishStream(message) {
     rows[0].cells[4].innerHTML = rate + " Hz";
     for (let i = 0; i < channels.length; ++i) {
         rows[i].cells[5].innerHTML = channels[i];
-        rows[i].cells[6].innerHTML = 
+        rows[i].cells[6].innerHTML =
             `<button onclick="displayStreamChannel('${name}', ${i})">Display</button> `
             + `<button onclick="zoomStreamChannel('${name}', ${i}, 2.0)">+</button>`
             + `<button onclick="zoomStreamChannel('${name}', ${i}, 0.5)">-</button>`
             + `<button onclick="zoomStreamChannel('${name}', ${i}, 0.0, 1.0)">0</button>`
-            + ((i == 0) ? ` <button onclick="replotStream('${name}')">Replot</button> `  : '');
-        updateScale(name, i);
+            + ((i == 0) ? ` <button onclick="replotStream('${name}')">Replot</button> ` : '');
+        if (rows[i].displayScale) {
+            updateScale(name, i);
+        }
     }
     // Resub
     if (oldStream && oldStream.resub) {
@@ -218,7 +259,7 @@ function displayStreamChannel(name, channel) {
         scaleCanvas.setAttribute('height', 128);
         scaleCell.appendChild(scaleCanvas);
         row.displayScale = scaleCanvas;
-        
+
         // Prepare storage
         const cache = row.cache;
         // cache.collector = [ ];
@@ -230,6 +271,7 @@ function displayStreamChannel(name, channel) {
             subscribe(name);
         }
         ++stream.subs;
+        updateScale(name, channel);
     }
 } displayStreamChannel;
 
@@ -349,7 +391,7 @@ function resultFrame(message) {
             const height = 128;
             const sampleScalar = height / Math.pow(2, stream.info.bits);
             const factor = sampleScalar * cache.zoom;
-            
+
             const timestamp = parseFloat(message.timestamp.toString());
             if (!cache.lastTimestamp) {
                 // cache.lastTimestamp = timestamp - (timestamp % 500000) + ((width - 1) * 500000); // Half a second per pixel
