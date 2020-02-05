@@ -329,6 +329,16 @@ function replotStream(name) {
     queryCache(name);
 } replotStream;
 
+function decodeChannel(channel) {
+    if (channel.delta) {
+        const data = channel.data;
+        for (let i = 1; i < data.length; ++i) {
+            data[i] = data[i - 1] + data[i];
+        }
+        channel.delta = false;
+    }
+}
+
 // Live frame
 function publishFrame(message) {
     // console.log(message);
@@ -341,6 +351,7 @@ function publishFrame(message) {
             const displayMinutes = rows[ch].displayMinutes;
             const displaySeconds = rows[ch].displaySeconds;
             const cache = rows[ch].cache;
+            decodeChannel(message.channels[ch]);
             const data = message.channels[ch].data;
             const ctxMin = displayMinutes.getContext("2d");
             const ctxSec = displaySeconds.getContext("2d");
@@ -409,6 +420,7 @@ function resultFrame(message) {
         if (rows[ch].displayRow) {
             const cache = rows[ch].cache;
             const displayMinutes = rows[ch].displayMinutes;
+            decodeChannel(message.channels[ch]);
             const data = message.channels[ch].data;
             const ctxMin = displayMinutes.getContext("2d");
             const zero = ~~stream.info.zero[ch];

@@ -151,9 +151,13 @@
     },
     "ChannelData": {
       "fields": {
+        "delta": {
+          "type": "bool",
+          "id": 31
+        },
         "data": {
           "rule": "repeated",
-          "type": "int32",
+          "type": "sint32",
           "id": 12,
           "options": {
             "(nanopb).max_count": 64

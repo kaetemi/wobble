@@ -337,9 +337,18 @@ wss.on('connection', function connection(ws) {
                     case 16: sampleView = new Int16Array(channels * samples); break;
                     case 8: sampleView = new Int8Array(channels * samples); break;
                 }
-                for (let s = 0; s < samples; ++s) {
-                    for (let c = 0; c < channels; ++c) {
-                        sampleView[(s * channels) + c] = writeFrame.channels[c].data[s];
+                for (let c = 0; c < channels; ++c) {
+                    if (writeFrame.channels[c].delta) {
+                        sampleView[c] = writeFrame.channels[c].data[0];
+                        for (let s = 1; s < samples; ++s) {
+                            sampleView[(s * channels) + c] = 
+                                writeFrame.channels[c].data[s - 1]
+                                + writeFrame.channels[c].data[s];
+                        }
+                    } else {
+                        for (let s = 0; s < samples; ++s) {
+                            sampleView[(s * channels) + c] = writeFrame.channels[c].data[s];
+                        }
                     }
                 }
                 let sampleBuffer = toBuffer(sampleView);
