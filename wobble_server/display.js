@@ -141,7 +141,6 @@ function publishStream(message) {
             displaySeconds: null,
             displayScale: null,
             cache: {
-                lastSample: null,
                 zoom: zoom,
             }
         });
@@ -169,8 +168,8 @@ function publishStream(message) {
 
 function displayStreamChannel(name, channel) {
     if (!displayTable) displayTable = document.getElementById("display");
-    let stream = streams[name];
-    let row = stream.rows[channel];
+    const stream = streams[name];
+    const row = stream.rows[channel];
     if (row.displayRow) {
         // Unsubscribe
         --stream.subs;
@@ -186,29 +185,35 @@ function displayStreamChannel(name, channel) {
         // Create canvas
         row.displayRow = displayTable.insertRow();
 
-        let minutesCell = row.displayRow.insertCell();
+        const minutesCell = row.displayRow.insertCell();
         minutesCell.setAttribute('bgcolor', '#E0E0E0');
-        let minutesCanvas = document.createElement("canvas");
+        const minutesCanvas = document.createElement("canvas");
         minutesCanvas.setAttribute('width', 768);
         minutesCanvas.setAttribute('height', 128);
         minutesCell.appendChild(minutesCanvas);
         row.displayMinutes = minutesCanvas;
 
-        let secondsCell = row.displayRow.insertCell();
+        const secondsCell = row.displayRow.insertCell();
         secondsCell.setAttribute('bgcolor', '#E0E0E0');
-        let secondsCanvas = document.createElement("canvas");
+        const secondsCanvas = document.createElement("canvas");
         secondsCanvas.setAttribute('width', 768);
         secondsCanvas.setAttribute('height', 128);
         secondsCell.appendChild(secondsCanvas);
         row.displaySeconds = secondsCanvas;
 
-        let scaleCell = row.displayRow.insertCell();
+        const scaleCell = row.displayRow.insertCell();
         scaleCell.setAttribute('bgcolor', '#E0E0E0');
-        let scaleCanvas = document.createElement("canvas");
+        const scaleCanvas = document.createElement("canvas");
         scaleCanvas.setAttribute('width', 32);
         scaleCanvas.setAttribute('height', 128);
         scaleCell.appendChild(scaleCanvas);
         row.displayScale = scaleCanvas;
+        
+        // Prepare storage
+        const cache = row.cache;
+        // cache.collector = [ ];
+        cache.lastSample = null;
+        cache.lastTimestamp = null;
 
         // Subscribe
         if (!stream.subs) {
@@ -278,6 +283,28 @@ function publishFrame(message) {
             ctxSec.stroke();
             cache.lastSample = data[data.length - 1];
             listRow.cells[8].innerHTML = message.timestamp.toString() + ' ' + cache.lastSample + ' ';
+
+            const timestamp = parseFloat(message.timestamp.toString());
+            if (!cache.lastTimestamp) {
+                cache.lastTimestamp = timestamp - 500000; // half a second per pixel
+            }
+            const usPerSample = 1000000.0 / stream.info.frequency;
+            const samplesPerPixel = stream.info.frequency / 2.0;
+            const pixelFill = `rgba(0, 0, 0, ${Math.min(1.0, 64.0 / samplesPerPixel)})`;
+            ctxMin.fillStyle = pixelFill;
+            for (let i = 0; i < data.length; ++i) {
+                const ts = timestamp + (i * usPerSample);
+                if (ts >= cache.lastTimestamp + 500000) {
+                    // Shift image by one pixel
+                    ctxMin.drawImage(displayMinutes, -1, 0);
+                    ctxMin.fillStyle = '#FFFFFF';
+                    ctxMin.fillRect(width - 1, 0, 1, height);
+                    ctxMin.fillStyle = pixelFill;
+                    cache.lastTimestamp = (cache.lastTimestamp + 500000);
+                }
+                const y = (height / 2) - (data[i] - zero) * sampleScalar * cache.zoom;
+                ctxMin.fillRect(width - 1, y, 1, 1);
+            }
         }
     }
 }
