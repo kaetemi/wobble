@@ -25,6 +25,8 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 /*
  * Wobble.
+ * IMPORTANT:
+ * - Set lwIP Variant to "v2 Higher Bandwidth"
  */
 
 #define CS_PIN 15
@@ -58,6 +60,7 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 // https://www.reddit.com/r/esp8266/comments/ausw32/turn_off_built_in_blue_led_wemos_d1_mini/
 // https://www.arduino.cc/reference/en/language/functions/external-interrupts/attachinterrupt/
 // https://forum.arduino.cc/index.php?topic=616264.0
+// https://arduino.stackexchange.com/questions/51893/how-to-rebuild-arduino-core-for-esp8266
 
 #ifdef ESP32
 #include <esp32-hal-cpu.h>
@@ -126,6 +129,7 @@ bool sensorChecked = false;
 
 #define ACCEL_BUFFER_SZ 2048
 #define ACCEL_BUFFER_MASK (ACCEL_BUFFER_SZ - 1)
+#define ACCEL_SAMPLE_BLOCK 55
 const int accelStreamAlias = 2;
 bool accelStreamOpen = false;
 bool accelStreamProblem = false;
@@ -489,6 +493,8 @@ void loop() {
     Serial.println("WiFi connected");
     Serial.println("IP address: ");
     Serial.println(WiFi.localIP());
+    Serial.print("TCP_SND_BUF: ");
+    Serial.println(TCP_SND_BUF);
     delayReset();
   }
 
@@ -723,7 +729,7 @@ void loop() {
     accelStreamProblem = false;
     accelRead(NULL); // Quick read
   }
-  if (accelOpenOrPublish(55)) {
+  if (accelOpenOrPublish(ACCEL_SAMPLE_BLOCK)) {
     clockUp();
     if (!accelStreamOpen) {
       int64_t timestamp;
@@ -755,7 +761,7 @@ void loop() {
         strcpy(messages.openStream.info.hardware, "LIS3DHH");
         messages.openStream.info.unit = Unit_G;
         messages.openStream.info.scale = 2.5f;
-        messages.openStream.info.zoom = 128.0f;
+        messages.openStream.info.zoom = 32.0f;
         messages.openStream.info.zero_count = 3;
         messages.openStream.info.zero[0] = 0;
         messages.openStream.info.zero[1] = 0;
@@ -784,13 +790,13 @@ void loop() {
           messages.writeFrame.channels[0].data,
           messages.writeFrame.channels[1].data,
           messages.writeFrame.channels[2].data,
-          55, NULL)) {
+          ACCEL_SAMPLE_BLOCK, NULL)) {
         messages.writeFrame.message_type = MessageType_WRITE_FRAME;
         messages.writeFrame.alias = accelStreamAlias;
         messages.writeFrame.channels_count = 3;
-        messages.writeFrame.channels[0].data_count = 55;
-        messages.writeFrame.channels[1].data_count = 55;
-        messages.writeFrame.channels[2].data_count = 55;
+        messages.writeFrame.channels[0].data_count = ACCEL_SAMPLE_BLOCK;
+        messages.writeFrame.channels[1].data_count = ACCEL_SAMPLE_BLOCK;
+        messages.writeFrame.channels[2].data_count = ACCEL_SAMPLE_BLOCK;
         pb_ostream_t stream = pb_ostream_from_buffer(buffers.any, sizeof(buffers));
         if (!pb_encode(&stream, WriteFrame_fields, &messages.writeFrame)) {
           Serial.println("Failed to encode WriteFrame");
@@ -804,7 +810,7 @@ void loop() {
           delaySafe();
           return;
         }
-        accelSamplesSent += 55;
+        accelSamplesSent += ACCEL_SAMPLE_BLOCK;
       }
       
       // Check for drift on the sensor timing

@@ -18,7 +18,7 @@ PB_BIND(OpenStream, OpenStream, 2)
 PB_BIND(ChannelData, ChannelData, 2)
 
 
-PB_BIND(WriteFrame, WriteFrame, 4)
+PB_BIND(WriteFrame, WriteFrame, 2)
 
 
 PB_BIND(CloseStream, CloseStream, AUTO)
@@ -36,7 +36,7 @@ PB_BIND(Subscribe, Subscribe, AUTO)
 PB_BIND(Unsubscribe, Unsubscribe, AUTO)
 
 
-PB_BIND(PublishFrame, PublishFrame, 4)
+PB_BIND(PublishFrame, PublishFrame, 2)
 
 
 PB_BIND(QueryFrames, QueryFrames, AUTO)
