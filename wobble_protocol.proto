@@ -103,7 +103,7 @@ message OpenStream {
 }
 
 message ChannelData {
-    repeated int32 data = 12 [(nanopb).max_count = 64];
+    repeated sint32 data = 12 [(nanopb).max_count = 64];
 }
 
 // Write a frame to a stream
