@@ -1,10 +1,9 @@
-/wobble_esp32_gd2/wifi_setup.h
 /wobble_server/package-lock.json
 /wobble_server/node_modules
 /wobble_server/access_rights.json
 /wobble_server/config.json
-/wobble_server/*.wav
-/wobble_server/*.flac
-/wobble_esp8266_lis3dhh/wifi_setup.h
 /wobble_server/record/*.wav
 /wobble_server/record/*.flac
+/wobble_server/mirror/*.wav
+/wobble_server/mirror/*.flac
+/wobble_esp8266_lis3dhh/wifi_setup.h
