@@ -84,6 +84,21 @@ let units = [
     "Relative Humidity",
 ]
 
+function updateScale(name, channel) {
+    const stream = streams[name];
+    const rows = stream.rows;
+    const row = rows[channel];
+    const listRow = row.row;
+    const scaleCanvas = row.displayScale;
+    const scaleCell = listRow.cells[7];
+    const cache = row.cache;
+    const zoom = cache.zoom;
+    const scale = stream.info.scale / zoom;
+    const unit = units[stream.info.unit];
+    const scaleText = "±" + scale + unit;
+    listRow.cells[7].innerHTML = scaleText;
+}
+
 function publishStream(message) {
     // Fetch all useful data
     if (!listTable) listTable = document.getElementById("list");
@@ -91,19 +106,20 @@ function publishStream(message) {
         console.log("No channels");
         return; // Useless
     }
-    let name = message.info.name;
-    let description = message.info.description || message.info.name;
-    let sensor = sensorTypes[message.info.sensor];
-    let hardware = message.info.hardware;
-    let unit = units[message.info.unit];
-    let rate = message.info.frequency;
-    let channels = [];
+    const name = message.info.name;
+    const description = message.info.description || message.info.name;
+    const sensor = sensorTypes[message.info.sensor];
+    const hardware = message.info.hardware;
+    const unit = units[message.info.unit];
+    const rate = message.info.frequency;
+    const zoom = message.info.zoom;
+    const channels = [];
     for (let i = 0; i < message.info.channels; ++i) {
         channels[i] = message.info.channelDescriptions[i] || ("[" + i + "]");
     }
-    let oldStream = streams[name];
-    let rows = oldStream ? streams[name].rows : [];
-    let stream = {
+    const oldStream = streams[name];
+    const rows = oldStream ? streams[name].rows : [];
+    const stream = {
         info: message.info,
         rows: rows,
         subs: oldStream ? oldStream.subs : 0,
@@ -111,11 +127,12 @@ function publishStream(message) {
     streams[name] = stream;
     for (let i = rows.length; i < channels.length; ++i) {
         // Add enough rows
-        let row = listTable.insertRow();
-        let cells = [];
-        for (let j = 0; j < 8; ++j) {
+        const row = listTable.insertRow();
+        const cells = [];
+        for (let j = 0; j < 9; ++j) {
             cells.push(row.insertCell());
         }
+        cells[6].setAttribute('style', 'white-space: nowrap');
         rows.push({
             row: row,
             cells: cells,
@@ -125,6 +142,7 @@ function publishStream(message) {
             displayScale: null,
             cache: {
                 lastSample: null,
+                zoom: zoom,
             }
         });
     }
@@ -136,7 +154,12 @@ function publishStream(message) {
     rows[0].cells[4].innerHTML = rate + " Hz";
     for (let i = 0; i < channels.length; ++i) {
         rows[i].cells[5].innerHTML = channels[i];
-        rows[i].cells[6].innerHTML = `<button onclick="displayStreamChannel('${name}', ${i})">Display</button>`;
+        rows[i].cells[6].innerHTML = 
+            `<button onclick="displayStreamChannel('${name}', ${i})">Display</button> `
+            + `<button onclick="zoomStreamChannel('${name}', ${i}, 2.0)">+</button>`
+            + `<button onclick="zoomStreamChannel('${name}', ${i}, 0.5)">-</button>`
+            + `<button onclick="zoomStreamChannel('${name}', ${i}, 0.0, 1.0)">0</button>`;
+        updateScale(name, i);
     }
     // Resub
     if (oldStream && oldStream.resub) {
@@ -195,6 +218,21 @@ function displayStreamChannel(name, channel) {
     }
 } displayStreamChannel;
 
+function zoomStreamChannel(name, channel, multiplier, zoom) {
+    const stream = streams[name];
+    const rows = stream.rows;
+    const row = rows[channel];
+    const listRow = row.row;
+    const cache = row.cache;
+    if (zoom) {
+        cache.zoom = zoom;
+    }
+    if (multiplier) {
+        cache.zoom *= multiplier;
+    }
+    updateScale(name, channel);
+}
+
 function publishFrame(message) {
     //console.log(message);
     if (!listTable) listTable = document.getElementById("list");
@@ -204,16 +242,17 @@ function publishFrame(message) {
     let rows = stream.rows;
     for (let ch = 0; ch < stream.rows.length; ++ch) {
         if (rows[ch].displayRow) {
-            let listRow = rows[ch].row;
-            let displayMinutes = rows[ch].displayMinutes;
-            let displaySeconds = rows[ch].displaySeconds;
-            let cache = rows[ch].cache;
-            let data = message.channels[ch].data;
-            var ctxMin = displayMinutes.getContext("2d");
-            var ctxSec = displaySeconds.getContext("2d");
-            let width = 768;
-            let height = 128;
-            let zero = ~~stream.info.zero[ch];
+            const listRow = rows[ch].row;
+            const displayMinutes = rows[ch].displayMinutes;
+            const displaySeconds = rows[ch].displaySeconds;
+            const cache = rows[ch].cache;
+            const data = message.channels[ch].data;
+            const ctxMin = displayMinutes.getContext("2d");
+            const ctxSec = displaySeconds.getContext("2d");
+            const width = 768;
+            const height = 128;
+            const zero = ~~stream.info.zero[ch];
+            const sampleScalar = height / Math.pow(2, stream.info.bits);
             if (cache.displayedSamples) {
                 // TODO: Shift image left when timestamp skips
                 // Shift image left by new samples
@@ -227,18 +266,18 @@ function publishFrame(message) {
             ctxSec.fillRect(width - data.length, 0, data.length, height);
             ctxSec.beginPath();
             if (cache.lastSample != null) {
-                ctxSec.moveTo(width - data.length - 1, (height / 2) - (cache.lastSample - zero) * 0.1);
+                ctxSec.moveTo(width - data.length - 1, (height / 2) - (cache.lastSample - zero) * sampleScalar * cache.zoom);
             }
             for (let i = 0; i < data.length; ++i) {
                 // TODO: Proper scaling etc
-                let x = width - data.length + i;
-                let y = (height / 2) - (data[i] - zero) * 0.1;
+                const x = width - data.length + i;
+                const y = (height / 2) - (data[i] - zero) * sampleScalar * cache.zoom;
                 if (cache.lastSample == null && i == 0) ctxSec.moveTo(x, y);
                 else ctxSec.lineTo(x, y);
             }
             ctxSec.stroke();
             cache.lastSample = data[data.length - 1];
-            listRow.cells[7].innerHTML = message.timestamp.toString() + ' ' + cache.lastSample;
+            listRow.cells[8].innerHTML = message.timestamp.toString() + ' ' + cache.lastSample + ' ';
         }
     }
 }
