@@ -16,6 +16,7 @@
 // https://github.com/Links2004/arduinoWebSockets
 // https://github.com/arduino-libraries/NTPClient
 // https://github.com/yoursunny/PriUint64/
+// https://techtutorialsx.com/2018/10/19/esp32-esp8266-arduino-protocol-buffers/
 
 // References:
 // https://www.instructables.com/id/Wemos-ESP8266-Getting-Started-Guide-Wemos-101/
