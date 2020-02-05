@@ -122,6 +122,7 @@ function publishStream(message) {
             displayRow: null,
             displayMinutes: null,
             displaySeconds: null,
+            displayScale: null,
             cache: {
                 lastSample: null,
             }
@@ -157,9 +158,11 @@ function displayStreamChannel(name, channel) {
         row.displayRow = null;
         row.displayMinutes = null;
         row.displaySeconds = null;
+        row.displayScale = null;
     } else {
-        // Subscribe
+        // Create canvas
         row.displayRow = displayTable.insertRow();
+
         let minutesCell = row.displayRow.insertCell();
         minutesCell.setAttribute('bgcolor', '#E0E0E0');
         let minutesCanvas = document.createElement("canvas");
@@ -167,6 +170,7 @@ function displayStreamChannel(name, channel) {
         minutesCanvas.setAttribute('height', 128);
         minutesCell.appendChild(minutesCanvas);
         row.displayMinutes = minutesCanvas;
+
         let secondsCell = row.displayRow.insertCell();
         secondsCell.setAttribute('bgcolor', '#E0E0E0');
         let secondsCanvas = document.createElement("canvas");
@@ -174,7 +178,16 @@ function displayStreamChannel(name, channel) {
         secondsCanvas.setAttribute('height', 128);
         secondsCell.appendChild(secondsCanvas);
         row.displaySeconds = secondsCanvas;
-        // Create canvas
+
+        let scaleCell = row.displayRow.insertCell();
+        scaleCell.setAttribute('bgcolor', '#E0E0E0');
+        let scaleCanvas = document.createElement("canvas");
+        scaleCanvas.setAttribute('width', 32);
+        scaleCanvas.setAttribute('height', 128);
+        scaleCell.appendChild(scaleCanvas);
+        row.displayScale = scaleCanvas;
+
+        // Subscribe
         if (!stream.subs) {
             subscribe(name);
         }
