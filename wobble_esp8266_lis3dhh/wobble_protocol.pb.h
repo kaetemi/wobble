@@ -270,7 +270,7 @@ X(a, STATIC,   OPTIONAL, MESSAGE,  info,             16)
 #define OpenStream_info_MSGTYPE StreamInfo
 
 #define ChannelData_FIELDLIST(X, a) \
-X(a, STATIC,   REPEATED, INT32,    data,             12)
+X(a, STATIC,   REPEATED, SINT32,   data,             12)
 #define ChannelData_CALLBACK NULL
 #define ChannelData_DEFAULT NULL
 
@@ -377,14 +377,14 @@ extern const pb_msgdesc_t ResultDone_msg;
 #define UndefinedMessage_size                    2
 #define StreamInfo_size                          598
 #define OpenStream_size                          680
-#define ChannelData_size                         704
-#define WriteFrame_size                          2845
+#define ChannelData_size                         384
+#define WriteFrame_size                          1565
 #define CloseStream_size                         13
 #define SubscribeStreamList_size                 2
 #define PublishStream_size                       604
 #define Subscribe_size                           67
 #define Unsubscribe_size                         67
-#define PublishFrame_size                        2922
+#define PublishFrame_size                        1642
 #define QueryFrames_size                         91
 #define QueryCache_size                          67
 #define ResultDone_size                          67
