@@ -511,10 +511,10 @@ void loop() {
     // Serial.print("Passed: ");
     // Serial.println(ntpPassed);
     if (!timeClient.forceUpdate()) { // Need to do the refresh timing manually since we throttle the clock
-      delaySafe();
       Serial.print("T");
-      timeReady = false;
+      // timeReady = false;
       refreshNtp = true;
+      delaySafe();
       return;
     }
     ntpLast = millis();
