@@ -151,7 +151,7 @@ int32_t accelOpenReads = 0;
 os_timer_t accelTimer;
 
 #if LIS_TEMP_SENSOR_EN
-#define LIS_TEMP_BUFFER_SZ 256
+#define LIS_TEMP_BUFFER_SZ 512
 #define LIS_TEMP_BUFFER_MASK (LIS_TEMP_BUFFER_SZ - 1)
 #define LIS_TEMP_SAMPLE_BLOCK 25
 #define LIS_TEMP_TIMER_INTERVAL (1000 / 50)

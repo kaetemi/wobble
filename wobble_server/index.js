@@ -212,7 +212,16 @@ wss.on('connection', function connection(ws) {
         if (!streamMap[ws.wobbleIndex]) {
             return; // Can't do anything with late messages
         }
-        let undefinedMessage = UndefinedMessage.decode(buffer);
+        let undefinedMessage;
+        try {
+            undefinedMessage = UndefinedMessage.decode(buffer);
+        } catch (err) {
+            console.error("Failed to decode new buffer");
+            console.error(buffer);
+            console.error(err);
+            ws.close();
+            return;
+        }
         if (undefinedMessage.messageType != MessageType.WRITE_FRAME
             && undefinedMessage.messageType != MessageType.PUBLISH_FRAME
             && undefinedMessage.messageType != MessageType.RESULT_FRAME) {
@@ -221,7 +230,16 @@ wss.on('connection', function connection(ws) {
         }
         switch (undefinedMessage.messageType) {
             case MessageType.OPEN_STREAM: {
-                let openStream = OpenStream.decode(buffer);
+                let openStream;
+                try {
+                    openStream = OpenStream.decode(buffer);
+                } catch (err) {
+                    console.error("Failed to decode OPEN_STREAM buffer");
+                    console.error(buffer);
+                    console.error(err);
+                    ws.close();
+                    return;
+                }
                 console.log(openStream);
                 let name = openStream.info.name;
                 let alias = openStream.alias;
@@ -282,7 +300,16 @@ wss.on('connection', function connection(ws) {
                 break;
             }
             case MessageType.CLOSE_STREAM: {
-                let closeStream = CloseStream.decode(buffer);
+                let closeStream;
+                try {
+                    closeStream = CloseStream.decode(buffer);
+                } catch (err) {
+                    console.error("Failed to decode CLOSE_STREAM buffer");
+                    console.error(buffer);
+                    console.error(err);
+                    ws.close();
+                    return;
+                }
                 console.log(closeStream);
                 let alias = closeStream.alias;
                 let name = streamMap[ws.wobbleIndex][alias];
@@ -303,7 +330,16 @@ wss.on('connection', function connection(ws) {
                 break;
             }
             case MessageType.WRITE_FRAME: {
-                let writeFrame = WriteFrame.decode(buffer);
+                let writeFrame;
+                try {
+                    writeFrame = WriteFrame.decode(buffer);
+                } catch (err) {
+                    console.error("Failed to decode WRITE_FRAME buffer");
+                    console.error(buffer);
+                    console.error(err);
+                    ws.close();
+                    return;
+                }
                 // console.log(writeFrame);
                 let alias = writeFrame.alias;
                 let name = streamMap[ws.wobbleIndex][alias];
@@ -377,7 +413,16 @@ wss.on('connection', function connection(ws) {
                 break;
             }
             case MessageType.SUBSCRIBE: {
-                let subscribe = Subscribe.decode(buffer);
+                let subscribe;
+                try {
+                    subscribe = Subscribe.decode(buffer);
+                } catch (err) {
+                    console.error("Failed to decode SUBSCRIBE buffer");
+                    console.error(buffer);
+                    console.error(err);
+                    ws.close();
+                    return;
+                }
                 console.log(subscribe);
                 let name = subscribe.name;
                 if (!streams[name]) {
@@ -388,7 +433,16 @@ wss.on('connection', function connection(ws) {
                 break;
             }
             case MessageType.UNSUBSCRIBE: {
-                let unsubscribe = Unsubscribe.decode(buffer);
+                let unsubscribe;
+                try {
+                    unsubscribe = Unsubscribe.decode(buffer);
+                } catch (err) {
+                    console.error("Failed to decode UNSUBSCRIBE buffer");
+                    console.error(buffer);
+                    console.error(err);
+                    ws.close();
+                    return;
+                }
                 console.log(unsubscribe);
                 let name = unsubscribe.name;
                 if (!streams[name]) {
@@ -401,7 +455,16 @@ wss.on('connection', function connection(ws) {
                 break;
             }
             case MessageType.SUBSCRIBE_STREAM_LIST: {
-                let subscribeStreamList = SubscribeStreamList.decode(buffer);
+                let subscribeStreamList;
+                try {
+                    subscribeStreamList = SubscribeStreamList.decode(buffer);
+                } catch (err) {
+                    console.error("Failed to decode SUBSCRIBE_STREAM_LIST buffer");
+                    console.error(buffer);
+                    console.error(err);
+                    ws.close();
+                    return;
+                }
                 console.log(subscribeStreamList);
                 listSubscribed[ws.wobbleIndex] = true;
                 for (let k in streams) {
@@ -410,7 +473,16 @@ wss.on('connection', function connection(ws) {
                 break;
             }
             case MessageType.QUERY_CACHE: {
-                let queryCache = QueryCache.decode(buffer);
+                let queryCache;
+                try {
+                    queryCache = QueryCache.decode(buffer);
+                } catch (err) {
+                    console.error("Failed to decode QUERY_CACHE buffer");
+                    console.error(buffer);
+                    console.error(err);
+                    ws.close();
+                    return;
+                }
                 console.log(queryCache);
                 let name = queryCache.name;
                 let stream = streams[name];
