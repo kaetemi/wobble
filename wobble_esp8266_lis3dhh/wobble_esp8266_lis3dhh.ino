@@ -133,6 +133,7 @@ bool sensorChecked = false;
 const int accelStreamAlias = 2;
 bool accelStreamOpen = false;
 bool accelStreamProblem = false;
+bool accelFifoOverflow = false;
 int16_t accelX[ACCEL_BUFFER_SZ], accelY[ACCEL_BUFFER_SZ], accelZ[ACCEL_BUFFER_SZ];
 int16_t accelRd = 0, accelWr = 0;
 int16_t accelRefWr = 0;
@@ -167,7 +168,10 @@ void accelReset() {
 // Called from timer
 void ICACHE_RAM_ATTR accelPushValue(int16_t x, int16_t y, int16_t z, int i) {
   // if (!accelStreamOpen) return;
-  if (accelStreamProblem) return;
+  if (accelStreamProblem) {
+    // Serial.println("DEBUG: accelPushValue accelStreamProblem");
+    return;
+  }
   int16_t rd = accelRd, wr = accelWr;
   int16_t space = (ACCEL_BUFFER_SZ - wr + rd - 1) & ACCEL_BUFFER_MASK;
   if (!space) {
@@ -196,6 +200,7 @@ void ICACHE_RAM_ATTR accelPushValue(int16_t x, int16_t y, int16_t z, int i) {
     accelRefTs = ts;
     accelRefReads = accelNextReads;
     accelNextTs = 0;
+    // Serial.println(PriUint64<DEC>(accelRefTs));
     if (!accelStreamOpen) {
       accelRd = wr; // Skip ahead
     }
@@ -422,6 +427,7 @@ void ICACHE_RAM_ATTR accelRead(void *) {
   if (reg.fifo_src.ovrn) {
     Serial.println("Accelerometer FIFO Overrun");
     accelStreamProblem = true;
+    accelFifoOverflow = true;
   }
   for (int i = 0; i < reg.fifo_src.fss; ++i) {
       int16_t sample[3];
@@ -588,6 +594,9 @@ void loop() {
       // Close accel stream
       accelStreamOpen = false;
       // accelStreamProblem = false;
+      if (sensorChecked) {
+        accelReset();
+      }
     }
     webSocket.begin(serverAddress, serverPort, "/", "wobble1");
     webSocket.onEvent(webSocketEvent);
@@ -603,6 +612,10 @@ void loop() {
     clockUp();
     webSocketProblem = false;
     webSocket.disconnect();
+    return;
+  }
+  if (!webSocketConnected) {
+    clockUp();
     return;
   }
 
@@ -628,13 +641,8 @@ void loop() {
     lis3dhh_reg_t reg;
     // ctrl_reg1, int1_ctrl, int2_ctrl, ctrl_reg4, ctrl_reg5, status, fifo_ctrl, fifo_src
 
-    // Disable Accelerometer
-    //res = sensor->Disable_X();
-    //if (res != LIS3DHH_STATUS_OK) { Serial.println("Failed Disable_X!"); delaySafe(); return; }
-
-    // Enable Accelerometer
-    //res = sensor->Enable_X();
-    //if (res != LIS3DHH_STATUS_OK) { Serial.println("Failed Enable_X!"); delaySafe(); return; }
+    res = sensor->Disable_X();
+    if (res != LIS3DHH_STATUS_OK) { Serial.println("Failed Disable_X!"); delaySafe(); return; }
 
     // Enable FIFO
     reg.byte = 0;
@@ -646,7 +654,7 @@ void loop() {
 
     // Set FIFO options
     reg.byte = 0;
-    reg.fifo_ctrl.fth = 28; // 12; // Threshold 12 / 32 fifo samples
+    reg.fifo_ctrl.fth = 24; // 12; // Threshold 12 / 32 fifo samples
     reg.fifo_ctrl.fmode = LIS3DHH_FIFO_MODE;
     res = sensor->WriteReg(LIS3DHH_FIFO_CTRL, reg.byte);
     if (res != LIS3DHH_STATUS_OK) { Serial.println("Failed WriteReg LIS3DHH_FIFO_CTRL!"); delaySafe(); return; }
@@ -664,7 +672,7 @@ void loop() {
     res = sensor->WriteReg(LIS3DHH_INT2_CTRL, reg.byte);
     if (res != LIS3DHH_STATUS_OK) { Serial.println("Failed WriteReg LIS3DHH_INT2_CTRL!"); delaySafe(); return; }
 
-    // TODO: Clear FIFO?
+    // Flush FIFO
     reg.byte = 0;
     res = sensor->ReadReg(LIS3DHH_FIFO_SRC, &reg.byte);
     if (res != LIS3DHH_STATUS_OK) { Serial.println("Failed ReadReg LIS3DHH_FIFO_SRC!"); delaySafe(); return; }
@@ -674,8 +682,6 @@ void loop() {
     Serial.println(reg.fifo_src.ovrn);
     Serial.print("FSS: ");
     Serial.println(reg.fifo_src.fss);
-
-    // Flush FIFO
     for (int i = 0; i < reg.fifo_src.fss; ++i) {
       int16_t sample[3];
       res = sensor->Get_X_AxesRaw(sample);
@@ -702,6 +708,53 @@ void loop() {
     Serial.println();
     sensorChecked = true; // After this, only access sensor from interrupt!
     accelRead(NULL); // Quick first read
+  }
+
+  if (accelFifoOverflow) {
+    clockUp();
+    accelReset();
+    Serial.println();
+    Serial.println("Restart accelerometer FIFO");
+    LIS3DHHStatusTypeDef res;
+    lis3dhh_reg_t reg;
+
+    // Set FIFO options to LIS3DHH_BYPASS_MODE
+    reg.byte = 0;
+    reg.fifo_ctrl.fth = 24; // 12; // Threshold 12 / 32 fifo samples
+    reg.fifo_ctrl.fmode = LIS3DHH_BYPASS_MODE;
+    res = sensor->WriteReg(LIS3DHH_FIFO_CTRL, reg.byte);
+    if (res != LIS3DHH_STATUS_OK) { Serial.println("Failed WriteReg LIS3DHH_FIFO_CTRL!"); delaySafe(); return; }
+
+    // Set FIFO options to LIS3DHH_FIFO_MODE
+    reg.byte = 0;
+    reg.fifo_ctrl.fth = 24; // 12; // Threshold 12 / 32 fifo samples
+    reg.fifo_ctrl.fmode = LIS3DHH_FIFO_MODE;
+    res = sensor->WriteReg(LIS3DHH_FIFO_CTRL, reg.byte);
+    if (res != LIS3DHH_STATUS_OK) { Serial.println("Failed WriteReg LIS3DHH_FIFO_CTRL!"); delaySafe(); return; }
+
+    // Flush FIFO
+    reg.byte = 0;
+    res = sensor->ReadReg(LIS3DHH_FIFO_SRC, &reg.byte);
+    if (res != LIS3DHH_STATUS_OK) { Serial.println("Failed ReadReg LIS3DHH_FIFO_SRC!"); delaySafe(); return; }
+    Serial.print("FTH: ");
+    Serial.println(reg.fifo_src.fth);
+    Serial.print("OVRN: ");
+    Serial.println(reg.fifo_src.ovrn);
+    Serial.print("FSS: ");
+    Serial.println(reg.fifo_src.fss);
+    for (int i = 0; i < reg.fifo_src.fss; ++i) {
+      int16_t sample[3];
+      res = sensor->Get_X_AxesRaw(sample);
+      Serial.print("X: ");
+      Serial.print(sample[0]);
+      Serial.print(", Y: ");
+      Serial.print(sample[1]);
+      Serial.print(", Z: ");
+      Serial.println(sample[2]);
+    }
+
+    Serial.println();
+    accelFifoOverflow = false;
   }
 
   // Routine to stream accelerometer samples
