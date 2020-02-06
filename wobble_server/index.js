@@ -522,6 +522,10 @@ wss.on('connection', function connection(ws) {
         }
         delete wsMap[ws.wobbleIndex];
     });
+
+    ws.on('error', function incoming(err) {
+        console.error(err);
+    });
 });
 
 server.listen(8090);
