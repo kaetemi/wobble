@@ -180,11 +180,14 @@ union {
   WriteFrame writeFrame;
 } messages;
 
-union {
-  uint8_t any[1];
-  uint8_t openStream[OpenStream_size];
-  uint8_t closeStream[CloseStream_size];
-  uint8_t writeFrame[WriteFrame_size];
+struct {
+  uint8_t hdr[WEBSOCKETS_MAX_HEADER_SIZE];
+  union {
+    uint8_t any[1];
+    uint8_t openStream[OpenStream_size];
+    uint8_t closeStream[CloseStream_size];
+    uint8_t writeFrame[WriteFrame_size];
+  } frame;
 } buffers;
 
 void setup() {
@@ -671,6 +674,11 @@ void loop() {
       return;
     }
     Serial.println("Web socket connected");
+    Serial.print("WEBSOCKETS_MAX_HEADER_SIZE: ");
+    Serial.print((int)buffers.frame.any - (int)buffers.hdr);
+    Serial.print(" ("); // Should be WEBSOCKETS_MAX_HEADER_SIZE (14)
+    Serial.print(WEBSOCKETS_MAX_HEADER_SIZE);
+    Serial.println(")");
     webSocketConnecting = false;
     delayReset();
     // TODO: Flag WS stream to restart from the next timestamp here!
@@ -867,13 +875,13 @@ void loop() {
       messages.closeStream = (CloseStream)CloseStream_init_zero;
       messages.closeStream.message_type = MessageType_CLOSE_STREAM;
       messages.closeStream.alias = accelStreamAlias;
-      pb_ostream_t stream = pb_ostream_from_buffer(buffers.any, sizeof(buffers));
+      pb_ostream_t stream = pb_ostream_from_buffer(buffers.frame.any, sizeof(buffers));
       if (!pb_encode(&stream, CloseStream_fields, &messages.closeStream)) {
         Serial.println("Failed to encode CloseStream");
         delaySafe();
         return;
       }
-      if (!webSocket.sendBIN(buffers.any, stream.bytes_written)) {
+      if (!webSocket.sendBIN(buffers.hdr, stream.bytes_written, true)) {
         Serial.println("Failed to send CloseStream");
         delaySafe();
         return;
@@ -923,13 +931,13 @@ void loop() {
         messages.openStream.info.center[2] = 13107; // 1g
         messages.openStream.info.latitude = latitude;
         messages.openStream.info.longitude = longitude;
-        pb_ostream_t stream = pb_ostream_from_buffer(buffers.any, sizeof(buffers));
+        pb_ostream_t stream = pb_ostream_from_buffer(buffers.frame.any, sizeof(buffers));
         if (!pb_encode(&stream, OpenStream_fields, &messages.openStream)) {
           Serial.println("Failed to encode OpenStream");
           delaySafe();
           return;
         }
-        if (!webSocket.sendBIN(buffers.any, stream.bytes_written)) {
+        if (!webSocket.sendBIN(buffers.hdr, stream.bytes_written, true)) {
           Serial.println("Failed to send OpenStream");
           delaySafe();
           return;
@@ -953,14 +961,14 @@ void loop() {
         messages.writeFrame.channels[0].data_count = ACCEL_SAMPLE_BLOCK;
         messages.writeFrame.channels[1].data_count = ACCEL_SAMPLE_BLOCK;
         messages.writeFrame.channels[2].data_count = ACCEL_SAMPLE_BLOCK;
-        pb_ostream_t stream = pb_ostream_from_buffer(buffers.any, sizeof(buffers));
+        pb_ostream_t stream = pb_ostream_from_buffer(buffers.frame.any, sizeof(buffers));
         if (!pb_encode(&stream, WriteFrame_fields, &messages.writeFrame)) {
           Serial.println("Failed to encode WriteFrame");
           accelStreamProblem = true;
           delaySafe();
           return;
         }
-        if (!webSocket.sendBIN(buffers.any, stream.bytes_written)) {
+        if (!webSocket.sendBIN(buffers.hdr, stream.bytes_written, true)) {
           Serial.println("Failed to send WriteFrame");
           accelStreamProblem = true;
           delaySafe();
@@ -1000,13 +1008,13 @@ void loop() {
       messages.closeStream = (CloseStream)CloseStream_init_zero;
       messages.closeStream.message_type = MessageType_CLOSE_STREAM;
       messages.closeStream.alias = lisTempStreamAlias;
-      pb_ostream_t stream = pb_ostream_from_buffer(buffers.any, sizeof(buffers));
+      pb_ostream_t stream = pb_ostream_from_buffer(buffers.frame.any, sizeof(buffers));
       if (!pb_encode(&stream, CloseStream_fields, &messages.closeStream)) {
         Serial.println("Failed to encode CloseStream");
         delaySafe();
         return;
       }
-      if (!webSocket.sendBIN(buffers.any, stream.bytes_written)) {
+      if (!webSocket.sendBIN(buffers.hdr, stream.bytes_written, true)) {
         Serial.println("Failed to send CloseStream");
         delaySafe();
         return;
@@ -1046,13 +1054,13 @@ void loop() {
         messages.openStream.info.zero[0] = -25 * 16;
         messages.openStream.info.latitude = latitude;
         messages.openStream.info.longitude = longitude;
-        pb_ostream_t stream = pb_ostream_from_buffer(buffers.any, sizeof(buffers));
+        pb_ostream_t stream = pb_ostream_from_buffer(buffers.frame.any, sizeof(buffers));
         if (!pb_encode(&stream, OpenStream_fields, &messages.openStream)) {
           Serial.println("Failed to encode OpenStream");
           delaySafe();
           return;
         }
-        if (!webSocket.sendBIN(buffers.any, stream.bytes_written)) {
+        if (!webSocket.sendBIN(buffers.hdr, stream.bytes_written, true)) {
           Serial.println("Failed to send OpenStream");
           delaySafe();
           return;
@@ -1071,14 +1079,14 @@ void loop() {
         messages.writeFrame.alias = lisTempStreamAlias;
         messages.writeFrame.channels_count = 1;
         messages.writeFrame.channels[0].data_count = LIS_TEMP_SAMPLE_BLOCK;
-        pb_ostream_t stream = pb_ostream_from_buffer(buffers.any, sizeof(buffers));
+        pb_ostream_t stream = pb_ostream_from_buffer(buffers.frame.any, sizeof(buffers));
         if (!pb_encode(&stream, WriteFrame_fields, &messages.writeFrame)) {
           Serial.println("Failed to encode WriteFrame");
           lisTempStreamProblem = true;
           delaySafe();
           return;
         }
-        if (!webSocket.sendBIN(buffers.any, stream.bytes_written)) {
+        if (!webSocket.sendBIN(buffers.hdr, stream.bytes_written, true)) {
           Serial.println("Failed to send WriteFrame");
           lisTempStreamProblem = true;
           delaySafe();
