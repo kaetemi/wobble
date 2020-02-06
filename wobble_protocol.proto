@@ -86,7 +86,8 @@ message StreamInfo {
     Unit unit = 27;
     float scale = 28; // scale in units over the positive bit range
     float zoom = 29; // how much to zoom by default
-    repeated int32 zero = 30 [(nanopb).max_count = 4]; // point which should be zero
+    repeated int32 center = 30 [(nanopb).max_count = 4]; // point which should be centered visually as if zero
+    repeated int32 zero = 31 [(nanopb).max_count = 4]; // point which should be absolute zero
     double latitude = 23;
     double longitude = 24;
 

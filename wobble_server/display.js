@@ -346,7 +346,7 @@ function publishFrame(message) {
             const ctxSec = displaySeconds.getContext("2d");
             const width = 768;
             const height = 128;
-            const zero = ~~stream.info.zero[ch];
+            const zeroCenter = ~~stream.info.zero[ch] + ~~stream.info.center[ch];
             const sampleScalar = height / Math.pow(2, stream.info.bits);
             const factor = sampleScalar * cache.zoom;
             if (cache.displayedSamples) {
@@ -360,17 +360,21 @@ function publishFrame(message) {
             ctxSec.fillRect(width - data.length, 0, data.length, height);
             ctxSec.beginPath();
             if (cache.lastSample != null) {
-                ctxSec.moveTo(width - data.length - 1, (height / 2) - (cache.lastSample - zero) * factor);
+                ctxSec.moveTo(width - data.length - 1, (height / 2) - (cache.lastSample - zeroCenter) * factor);
             }
             for (let i = 0; i < data.length; ++i) {
                 const x = width - data.length + i;
-                const y = (height / 2) - (data[i] - zero) * factor;
+                const y = (height / 2) - (data[i] - zeroCenter) * factor;
                 if (cache.lastSample == null && i == 0) ctxSec.moveTo(x, y);
                 else ctxSec.lineTo(x, y);
             }
             ctxSec.stroke();
             cache.lastSample = data[data.length - 1];
-            listRow.cells[8].innerHTML = message.timestamp.toString() + ' ' + cache.lastSample + ' ';
+            
+            const bitsToUnits = 2.0 * stream.info.scale / Math.pow(2, stream.info.bits);
+            const unit = units[stream.info.unit];
+            listRow.cells[8].innerHTML = message.timestamp.toString() + ' ' + cache.lastSample + ' '
+                + ((cache.lastSample - (~~stream.info.zero[ch])) * bitsToUnits) + unit;
 
             const timestamp = parseFloat(message.timestamp.toString());
             if (!cache.lastTimestamp) {
@@ -392,7 +396,7 @@ function publishFrame(message) {
                     ctxMin.fillStyle = pixelFill;
                     cache.lastTimestamp = (cache.lastTimestamp + (500000 * tsr));
                 }
-                const y = (height / 2) - (data[i] - zero) * factor;
+                const y = (height / 2) - (data[i] - zeroCenter) * factor;
                 ctxMin.fillRect(width - 1, y, 1, 1);
             }
         }
@@ -411,7 +415,7 @@ function resultFrame(message) {
             const displayMinutes = rows[ch].displayMinutes;
             const data = message.channels[ch].data;
             const ctxMin = displayMinutes.getContext("2d");
-            const zero = ~~stream.info.zero[ch];
+            const zeroCenter = ~~stream.info.zero[ch] + ~~stream.info.center[ch];;
             const width = 768;
             const height = 128;
             const sampleScalar = height / Math.pow(2, stream.info.bits);
@@ -440,7 +444,7 @@ function resultFrame(message) {
                 }
                 tsr = ~~((ts - cache.lastTimestamp) / 500000);
                 const x = width + tsr - 1;
-                const y = (height / 2) - (data[i] - zero) * factor;
+                const y = (height / 2) - (data[i] - zeroCenter) * factor;
                 ctxMin.fillRect(x, y, 1, 1);
             }
         }

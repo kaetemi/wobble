@@ -34,6 +34,8 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #define INT1_PIN 5
 #define INT2_PIN 4
 
+#define LIS_TEMP_SENSOR_EN 1
+
 // Boards Manager URLs:
 // https://dl.espressif.com/dl/package_esp32_index.json (esp32)
 // https://arduino.esp8266.com/stable/package_esp8266com_index.json (esp8266)
@@ -85,7 +87,9 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include <pb_encode.h>
 
 #include <SPI.h>
+#define private public
 #include <LIS3DHHSensor.h>
+#undef private
 
 #include "wobble_protocol.pb.h"
 #include "wifi_setup.h"
@@ -146,6 +150,19 @@ int64_t accelOpenTs = 0;
 int32_t accelOpenReads = 0;
 os_timer_t accelTimer;
 
+#if LIS_TEMP_SENSOR_EN
+#define LIS_TEMP_BUFFER_SZ 256
+#define LIS_TEMP_BUFFER_MASK (LIS_TEMP_BUFFER_SZ - 1)
+#define LIS_TEMP_SAMPLE_BLOCK 25
+#define LIS_TEMP_TIMER_INTERVAL (1000 / 50)
+const int lisTempStreamAlias = 3;
+bool lisTempStreamOpen = false;
+bool lisTempStreamProblem = false;
+int16_t lisTemp[LIS_TEMP_BUFFER_SZ];
+int64_t lisTempRd = 0, lisTempWr = 0;
+os_timer_t lisTempTimer;
+#endif
+
 void delaySafe(int32_t maxTimeout = 1000) {
   delay(safeTimeout);
   if (safeTimeout < maxTimeout) {
@@ -155,114 +172,6 @@ void delaySafe(int32_t maxTimeout = 1000) {
 
 void delayReset() {
   safeTimeout = 10;
-}
-
-void accelReset() {
-  accelRd = 0;
-  accelWr = 0;
-  accelRefWr = 0;
-  accelRefTs = 0;
-  accelRefReads = 0;
-}
-
-// Called from timer
-void ICACHE_RAM_ATTR accelPushValue(int16_t x, int16_t y, int16_t z, int i) {
-  // if (!accelStreamOpen) return;
-  if (accelStreamProblem) {
-    // Serial.println("DEBUG: accelPushValue accelStreamProblem");
-    return;
-  }
-  int16_t rd = accelRd, wr = accelWr;
-  int16_t space = (ACCEL_BUFFER_SZ - wr + rd - 1) & ACCEL_BUFFER_MASK;
-  if (!space) {
-    Serial.println("Accelerometer buffer out of space");
-    accelStreamProblem = true;
-    // System will restart stream & clear buffer
-    return;
-  }
-  accelX[accelWr] = x;
-  accelY[accelWr] = y;
-  accelZ[accelWr] = z;
-  /*
-  Serial.print("X: ");
-  Serial.print(x);
-  Serial.print(", Y: ");
-  Serial.print(y);
-  Serial.print(", Z: ");
-  Serial.println(z);
-  */
-  int64_t ts = accelNextTs;
-  if (i == 0 && ts) {
-    // This is the first read in this fifo batch,
-    // the last stored timestamp is good to use!
-    // Store the next batch timestamp when done processing this fifo.
-    accelRefWr = wr;
-    accelRefTs = ts;
-    accelRefReads = accelNextReads;
-    accelNextTs = 0;
-    // Serial.println(PriUint64<DEC>(accelRefTs));
-    if (!accelStreamOpen) {
-      accelRd = wr; // Skip ahead
-    }
-  }
-  accelWr = (wr + 1) & ACCEL_BUFFER_MASK;
-}
-
-bool accelOpenOrPublish(int count) {
-  if (accelStreamProblem) return false;
-  int16_t rd = accelRd, wr = accelWr;
-  if (accelStreamOpen) {
-    int16_t space = (ACCEL_BUFFER_SZ - wr + rd - 1) & ACCEL_BUFFER_MASK;
-    int16_t written = ACCEL_BUFFER_SZ - space;
-    return written >= count;
-  } else {
-    int64_t refTs = accelRefTs;
-    int16_t refWr = accelRefWr;
-    int16_t space = (ACCEL_BUFFER_SZ - wr + rd - 1) & ACCEL_BUFFER_MASK;
-    int16_t written = ACCEL_BUFFER_SZ - space;
-    int16_t refOff = (refWr - rd) & ACCEL_BUFFER_MASK;
-    // Serial.println(refOff);
-    // Serial.println(written);
-    // Serial.println(PriUint64<DEC>(refTs));
-    delaySafe();
-    return (refOff < written) && refTs;
-  }
-}
-
-// Called from main function
-bool accelReadValues(int32_t *x, int32_t *y, int32_t *z, int count, int64_t *timestamp = NULL, int32_t *reads = NULL) {
-  // if (!accelStreamOpen) return false;
-  if (accelStreamProblem) return false;
-  // Only set timestamp if a timestamp is wanted
-  // A timestamp is only needed for opening the stream
-  int16_t rd = accelRd, wr = accelWr;
-  int64_t refTs = accelRefTs;
-  int16_t refWr = accelRefWr;
-  int16_t space = (ACCEL_BUFFER_SZ - wr + rd - 1) & ACCEL_BUFFER_MASK;
-  int16_t written = ACCEL_BUFFER_SZ - space;
-  int16_t refOff = (refWr - rd) & ACCEL_BUFFER_MASK;
-  if (timestamp) {
-    if (refOff >= written || !refTs) {
-      // Don't have a valid timestamp currently
-      return false;
-    }
-    *timestamp = refTs;
-    if (reads) {
-      *reads = accelRefReads;
-    }
-  }
-  if (count >= written) {
-    // Don't have enough values currently
-    return false;
-  }
-  for (int i = 0; i < count; ++i) {
-    int rdi = (rd + i) & ACCEL_BUFFER_MASK;
-    x[i] = accelX[rdi];
-    y[i] = accelY[rdi];
-    z[i] = accelZ[rdi];
-  }
-  accelRd = (rd + count) & ACCEL_BUFFER_MASK;
-  return true;
 }
 
 union {
@@ -412,6 +321,114 @@ void webSocketEvent(WStype_t type, uint8_t *payload, size_t length) {
   }
 }
 
+void accelReset() {
+  accelRd = 0;
+  accelWr = 0;
+  accelRefWr = 0;
+  accelRefTs = 0;
+  accelRefReads = 0;
+}
+
+// Called from timer
+void ICACHE_RAM_ATTR accelPushValue(int16_t x, int16_t y, int16_t z, int i) {
+  // if (!accelStreamOpen) return;
+  if (accelStreamProblem) {
+    // Serial.println("DEBUG: accelPushValue accelStreamProblem");
+    return;
+  }
+  int16_t rd = accelRd, wr = accelWr;
+  int16_t space = (ACCEL_BUFFER_SZ - wr + rd - 1) & ACCEL_BUFFER_MASK;
+  if (!space) {
+    Serial.println("Accelerometer buffer out of space");
+    accelStreamProblem = true;
+    // System will restart stream & clear buffer
+    return;
+  }
+  accelX[wr] = x;
+  accelY[wr] = y;
+  accelZ[wr] = z;
+  /*
+  Serial.print("X: ");
+  Serial.print(x);
+  Serial.print(", Y: ");
+  Serial.print(y);
+  Serial.print(", Z: ");
+  Serial.println(z);
+  */
+  int64_t ts = accelNextTs;
+  if (i == 0 && ts) {
+    // This is the first read in this fifo batch,
+    // the last stored timestamp is good to use!
+    // Store the next batch timestamp when done processing this fifo.
+    accelRefWr = wr;
+    accelRefTs = ts;
+    accelRefReads = accelNextReads;
+    accelNextTs = 0;
+    // Serial.println(PriUint64<DEC>(accelRefTs));
+    if (!accelStreamOpen) {
+      accelRd = wr; // Skip ahead
+    }
+  }
+  accelWr = (wr + 1) & ACCEL_BUFFER_MASK;
+}
+
+bool accelOpenOrPublish(int count) {
+  if (accelStreamProblem) return false;
+  int16_t rd = accelRd, wr = accelWr;
+  if (accelStreamOpen) {
+    int16_t space = (ACCEL_BUFFER_SZ - wr + rd - 1) & ACCEL_BUFFER_MASK;
+    int16_t written = ACCEL_BUFFER_SZ - space;
+    return written >= count;
+  } else {
+    int64_t refTs = accelRefTs;
+    int16_t refWr = accelRefWr;
+    int16_t space = (ACCEL_BUFFER_SZ - wr + rd - 1) & ACCEL_BUFFER_MASK;
+    int16_t written = ACCEL_BUFFER_SZ - space;
+    int16_t refOff = (refWr - rd) & ACCEL_BUFFER_MASK;
+    // Serial.println(refOff);
+    // Serial.println(written);
+    // Serial.println(PriUint64<DEC>(refTs));
+    delaySafe();
+    return (refOff < written) && refTs;
+  }
+}
+
+// Called from main function
+bool accelReadValues(int32_t *x, int32_t *y, int32_t *z, int count, int64_t *timestamp = NULL, int32_t *reads = NULL) {
+  // if (!accelStreamOpen) return false;
+  if (accelStreamProblem) return false;
+  // Only set timestamp if a timestamp is wanted
+  // A timestamp is only needed for opening the stream
+  int16_t rd = accelRd, wr = accelWr;
+  int64_t refTs = accelRefTs;
+  int16_t refWr = accelRefWr;
+  int16_t space = (ACCEL_BUFFER_SZ - wr + rd - 1) & ACCEL_BUFFER_MASK;
+  int16_t written = ACCEL_BUFFER_SZ - space;
+  int16_t refOff = (refWr - rd) & ACCEL_BUFFER_MASK;
+  if (timestamp) {
+    if (refOff >= written || !refTs) {
+      // Don't have a valid timestamp currently
+      return false;
+    }
+    *timestamp = refTs;
+    if (reads) {
+      *reads = accelRefReads;
+    }
+  }
+  if (count >= written) {
+    // Don't have enough values currently
+    return false;
+  }
+  for (int i = 0; i < count; ++i) {
+    int rdi = (rd + i) & ACCEL_BUFFER_MASK;
+    x[i] = accelX[rdi];
+    y[i] = accelY[rdi];
+    z[i] = accelZ[rdi];
+  }
+  accelRd = (rd + count) & ACCEL_BUFFER_MASK;
+  return true;
+}
+
 void ICACHE_RAM_ATTR accelRead(void *) {
   int64_t nextTs = currentTimestamp();
   int32_t nextReads = accelReads;
@@ -450,6 +467,73 @@ void ICACHE_RAM_ATTR accelRead(void *) {
   accelNextTs = nextTs;
   accelNextReads = nextReads;
 }
+
+#if LIS_TEMP_SENSOR_EN
+void lisTempReset() {
+  lisTempRd = 0;
+  lisTempWr = 0;
+}
+
+bool lisTempOpenOrPublish(int count) {
+  if (lisTempStreamProblem) return false;
+  int16_t rd = lisTempRd, wr = lisTempWr;
+  int16_t space = (LIS_TEMP_BUFFER_SZ - wr + rd - 1) & LIS_TEMP_BUFFER_MASK;
+  int16_t written = LIS_TEMP_BUFFER_SZ - space;
+  if (lisTempStreamOpen) {
+    return written >= count;
+  } else {
+    return written > 0;
+  }
+}
+
+void ICACHE_RAM_ATTR lisTempPushValue(int16_t temp) {
+  if (lisTempStreamProblem) return;
+  int16_t rd = lisTempRd, wr = lisTempWr;
+  int16_t space = (LIS_TEMP_BUFFER_SZ - wr + rd - 1) & LIS_TEMP_BUFFER_MASK;
+  if (!space) {
+    Serial.println("Temperature buffer out of space");
+    lisTempStreamProblem = true;
+    // System will restart stream & clear buffer
+    return;
+  }
+  lisTemp[wr] = temp;
+  lisTempWr = (wr + 1) & LIS_TEMP_BUFFER_MASK;
+}
+
+bool ICACHE_RAM_ATTR lisTempReadValues(int32_t *temp, int count, int64_t *timestamp = NULL) {
+  if (lisTempStreamProblem) return false;
+  int16_t rd = lisTempRd, wr = lisTempWr;
+  int16_t space = (LIS_TEMP_BUFFER_SZ - wr + rd - 1) & LIS_TEMP_BUFFER_MASK;
+  int16_t written = LIS_TEMP_BUFFER_SZ - space;
+  if (timestamp && written > 0) {
+    // Timestamping for temperature should match system clock, since it's sampled by the timer
+    // Temperature sampling may have aliasing due to not matching the native sampling rate
+    // Simply calculate the past timestamp
+    *timestamp = currentTimestamp() - (LIS_TEMP_TIMER_INTERVAL * 1000 * written);
+  }
+  if (count >= written) {
+    // Don't have enough values currently
+    return false;
+  }
+  for (int i = 0; i < count; ++i) {
+    int rdi = (rd + i) & LIS_TEMP_BUFFER_MASK;
+    temp[i] = lisTemp[rdi];
+  }
+  lisTempRd = (rd + count) & LIS_TEMP_BUFFER_MASK;
+  return true;
+}
+
+void ICACHE_RAM_ATTR lisTempRead(void *) {
+  int32_t res;
+  axis1bit16_t buf;
+  res = lis3dhh_temperature_raw_get(&sensor->reg_ctx, buf.u8bit);
+  if (res) {
+    lisTempStreamProblem = true;
+    return;
+  }
+  lisTempPushValue(buf.i16bit >> 4);
+}
+#endif
 
 void loop() {
   // Might actually move this whole thing into the accelerometer interrupt handler..
@@ -569,7 +653,10 @@ void loop() {
       Serial.print("Drift: ");
       Serial.println(PriUint64<DEC>(timestampDrift));
       timeReady = false;
-      // TODO: Close temperature stream, since it follows the clock
+#if LIS_TEMP_SENSOR_EN
+      // Close temperature stream, since it follows the system clock
+      lisTempStreamProblem = true;
+#endif
       return;
     }
   }
@@ -598,6 +685,14 @@ void loop() {
         accelReset();
       }
     }
+#if LIS_TEMP_SENSOR_EN
+    if (lisTempStreamOpen) {
+      lisTempStreamOpen = false;
+      if (sensorChecked) {
+        lisTempReset();
+      }
+    }
+#endif
     webSocket.begin(serverAddress, serverPort, "/", "wobble1");
     webSocket.onEvent(webSocketEvent);
     webSocketConnecting = true;
@@ -700,6 +795,11 @@ void loop() {
     // Interrupt with SPI not working reliably
     // Regular call not reliable either due to WiFi!
     
+#if LIS_TEMP_SENSOR_EN
+    os_timer_setfn(&lisTempTimer, lisTempRead, NULL);
+    os_timer_arm(&lisTempTimer, LIS_TEMP_TIMER_INTERVAL, true);
+#endif
+    
     res = sensor->Enable_X();
     if (res != LIS3DHH_STATUS_OK) { Serial.println("Failed Enable_X!"); delaySafe(); return; }
 
@@ -709,6 +809,7 @@ void loop() {
     sensorChecked = true; // After this, only access sensor from interrupt!
     accelRead(NULL); // Quick first read
   }
+  bool wsSent = false;
 
   if (accelFifoOverflow) {
     clockUp();
@@ -777,12 +878,13 @@ void loop() {
         delaySafe();
         return;
       }
+      wsSent = true;
       accelStreamOpen = false;
     }
     accelStreamProblem = false;
     accelRead(NULL); // Quick read
   }
-  if (accelOpenOrPublish(ACCEL_SAMPLE_BLOCK)) {
+  if (!wsSent && accelOpenOrPublish(ACCEL_SAMPLE_BLOCK)) {
     clockUp();
     if (!accelStreamOpen) {
       int64_t timestamp;
@@ -815,10 +917,10 @@ void loop() {
         messages.openStream.info.unit = Unit_G;
         messages.openStream.info.scale = 2.5f;
         messages.openStream.info.zoom = 32.0f;
-        messages.openStream.info.zero_count = 3;
-        messages.openStream.info.zero[0] = 0;
-        messages.openStream.info.zero[1] = 0;
-        messages.openStream.info.zero[2] = 13107; // 1g
+        messages.openStream.info.center_count = 3;
+        messages.openStream.info.center[0] = 0;
+        messages.openStream.info.center[1] = 0;
+        messages.openStream.info.center[2] = 13107; // 1g
         messages.openStream.info.latitude = latitude;
         messages.openStream.info.longitude = longitude;
         pb_ostream_t stream = pb_ostream_from_buffer(buffers.any, sizeof(buffers));
@@ -832,6 +934,7 @@ void loop() {
           delaySafe();
           return;
         }
+        wsSent = true;
         accelStreamOpen = true;
         accelStreamProblem = false;
         accelSamplesSent = 0;
@@ -863,6 +966,7 @@ void loop() {
           delaySafe();
           return;
         }
+        wsSent = true;
         accelSamplesSent += ACCEL_SAMPLE_BLOCK;
       }
       
@@ -885,6 +989,106 @@ void loop() {
       }
     }
   }
+
+#if LIS_TEMP_SENSOR_EN
+  // Routine to stream temperature samples
+  if (lisTempStreamProblem) {
+    clockUp();
+    lisTempReset();
+    if (lisTempStreamOpen) {
+      Serial.println("Close temperature stream");
+      messages.closeStream = (CloseStream)CloseStream_init_zero;
+      messages.closeStream.message_type = MessageType_CLOSE_STREAM;
+      messages.closeStream.alias = lisTempStreamAlias;
+      pb_ostream_t stream = pb_ostream_from_buffer(buffers.any, sizeof(buffers));
+      if (!pb_encode(&stream, CloseStream_fields, &messages.closeStream)) {
+        Serial.println("Failed to encode CloseStream");
+        delaySafe();
+        return;
+      }
+      if (!webSocket.sendBIN(buffers.any, stream.bytes_written)) {
+        Serial.println("Failed to send CloseStream");
+        delaySafe();
+        return;
+      }
+      wsSent = true;
+      lisTempStreamOpen = false;
+    }
+    lisTempStreamProblem = false;
+  }
+  if (!wsSent && lisTempOpenOrPublish(LIS_TEMP_SAMPLE_BLOCK)) {
+    clockUp();
+    if (!lisTempStreamOpen) {
+      int64_t timestamp;
+      if (lisTempReadValues(NULL,  0, &timestamp)) {
+        Serial.print("Open temperature stream at ");
+        Serial.println(PriUint64<DEC>(timestamp));
+        messages.openStream = (OpenStream)OpenStream_init_zero;
+        messages.openStream.message_type = MessageType_OPEN_STREAM;
+        strcpy(messages.openStream.password, lisTempPassword);
+        messages.openStream.has_info = true;
+        strcpy(messages.openStream.info.name, lisTempName);
+        messages.openStream.alias = lisTempStreamAlias;
+        messages.openStream.info.channels = 1;
+        messages.openStream.info.frequency = 50;
+        messages.openStream.info.bits = 12;
+        messages.openStream.info.timestamp = timestamp; // The timestamp that was set when the sensor fifo was cleared, so the timestamp of the first sample
+        strcpy(messages.openStream.info.description, lisTempDescription);
+        messages.openStream.info.channel_descriptions_count = 1;
+        strcpy(messages.openStream.info.channel_descriptions[0], "Temperature");
+        messages.openStream.info.timestamp_precision = 1000000; // 1s
+        messages.openStream.info.sensor = SensorType_TEMPERATURE;
+        strcpy(messages.openStream.info.hardware, "LIS3DHH");
+        messages.openStream.info.unit = Unit_CELSIUS;
+        messages.openStream.info.scale = 128.0f; // 16 bitcounts per unit
+        messages.openStream.info.zoom = 128.0f / 50.0f;
+        messages.openStream.info.zero_count = 1;
+        messages.openStream.info.zero[0] = -25 * 16;
+        messages.openStream.info.latitude = latitude;
+        messages.openStream.info.longitude = longitude;
+        pb_ostream_t stream = pb_ostream_from_buffer(buffers.any, sizeof(buffers));
+        if (!pb_encode(&stream, OpenStream_fields, &messages.openStream)) {
+          Serial.println("Failed to encode OpenStream");
+          delaySafe();
+          return;
+        }
+        if (!webSocket.sendBIN(buffers.any, stream.bytes_written)) {
+          Serial.println("Failed to send OpenStream");
+          delaySafe();
+          return;
+        }
+        wsSent = true;
+        lisTempStreamOpen = true;
+        lisTempStreamProblem = false;
+      }
+    }
+    if (lisTempStreamOpen) {
+      messages.writeFrame = (WriteFrame)WriteFrame_init_zero;
+      if (lisTempReadValues(
+          messages.writeFrame.channels[0].data,
+          LIS_TEMP_SAMPLE_BLOCK, NULL)) {
+        messages.writeFrame.message_type = MessageType_WRITE_FRAME;
+        messages.writeFrame.alias = lisTempStreamAlias;
+        messages.writeFrame.channels_count = 1;
+        messages.writeFrame.channels[0].data_count = LIS_TEMP_SAMPLE_BLOCK;
+        pb_ostream_t stream = pb_ostream_from_buffer(buffers.any, sizeof(buffers));
+        if (!pb_encode(&stream, WriteFrame_fields, &messages.writeFrame)) {
+          Serial.println("Failed to encode WriteFrame");
+          lisTempStreamProblem = true;
+          delaySafe();
+          return;
+        }
+        if (!webSocket.sendBIN(buffers.any, stream.bytes_written)) {
+          Serial.println("Failed to send WriteFrame");
+          lisTempStreamProblem = true;
+          delaySafe();
+          return;
+        }
+        wsSent = true;
+      }
+    }
+  }
+#endif
 
   // Clock down when we're done!
   clockDown();

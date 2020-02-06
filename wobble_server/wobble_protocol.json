@@ -92,10 +92,18 @@
           "type": "float",
           "id": 29
         },
-        "zero": {
+        "center": {
           "rule": "repeated",
           "type": "int32",
           "id": 30,
+          "options": {
+            "(nanopb).max_count": 4
+          }
+        },
+        "zero": {
+          "rule": "repeated",
+          "type": "int32",
+          "id": 31,
           "options": {
             "(nanopb).max_count": 4
           }
