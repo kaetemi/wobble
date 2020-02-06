@@ -432,6 +432,18 @@ bool accelReadValues(int32_t *x, int32_t *y, int32_t *z, int count, int64_t *tim
   return true;
 }
 
+bool accelBackoutRead(int count) {
+  // Attempt to back out of a read when sending fails
+  if (accelStreamProblem) return false;
+  int16_t rd = accelRd, wr = accelWr;
+  int16_t space = (ACCEL_BUFFER_SZ - wr + rd - 1) & ACCEL_BUFFER_MASK;
+  if (space < count) {
+    return false;
+  }
+  accelRd = (rd - count) & ACCEL_BUFFER_MASK;
+  return true;
+}
+
 void ICACHE_RAM_ATTR accelRead(void *) {
   int64_t nextTs = currentTimestamp();
   int32_t nextReads = accelReads;
@@ -970,8 +982,13 @@ void loop() {
         }
         if (!webSocket.sendBIN(buffers.hdr, stream.bytes_written, true)) {
           Serial.println("Failed to send WriteFrame");
-          accelStreamProblem = true;
-          delaySafe();
+          if (accelBackoutRead(ACCEL_SAMPLE_BLOCK)) {
+            Serial.println("Backed out of frame, reattempt WriteFrame");
+            delaySafe();
+          } else {
+            accelStreamProblem = true;
+            delaySafe();
+          }
           return;
         }
         wsSent = true;
