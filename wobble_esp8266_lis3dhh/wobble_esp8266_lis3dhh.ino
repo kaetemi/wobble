@@ -27,9 +27,10 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  * Wobble.
  * IMPORTANT:
  * - Set lwIP Variant to "v2 Higher Bandwidth"
+ * - Builtin Led: "2"
  */
 
-#define CS_PIN 15
+#define CS_PIN 15 // Wemos D1 mini, NodeMCU ESP-12E
 
 #define INT1_PIN 5
 #define INT2_PIN 4
@@ -212,6 +213,7 @@ void setup() {
   digitalWrite(LED_BUILTIN, LOW); // Turn on LED
   
   SPI.begin();
+  // SPI.setFrequency(1000000);
   sensor = new LIS3DHHSensor(&SPI, CS_PIN);
 }
 
@@ -1060,7 +1062,7 @@ void loop() {
         messages.openStream.info.timestamp = timestamp; // The timestamp that was set when the sensor fifo was cleared, so the timestamp of the first sample
         strcpy(messages.openStream.info.description, lisTempDescription);
         messages.openStream.info.channel_descriptions_count = 1;
-        strcpy(messages.openStream.info.channel_descriptions[0], "Temperature");
+        strcpy(messages.openStream.info.channel_descriptions[0], "Sensor");
         messages.openStream.info.timestamp_precision = 1000000; // 1s
         messages.openStream.info.sensor = SensorType_TEMPERATURE;
         strcpy(messages.openStream.info.hardware, "LIS3DHH");
