@@ -33,7 +33,7 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #define SENSOR_LIS3DHH 1
 #define SENSOR_MPU6050 2
 
-#define SENSOR SENSOR_MPU6050
+#define SENSOR SENSOR_LIS3DHH
 
 #if (SENSOR == SENSOR_LIS3DHH)
 #define CS_PIN 15 // Wemos D1 mini, NodeMCU ESP-12E
@@ -45,8 +45,8 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #define INT1_PIN 5
 #define INT2_PIN 4
 
-#define OPT_FIFO_EN 0
-#define AUXIL_SENSOR_EN 0
+#define OPT_FIFO_EN 1
+#define AUXIL_SENSOR_EN 1
 
 // Boards Manager URLs:
 // https://dl.espressif.com/dl/package_esp32_index.json (esp32)
