@@ -30,18 +30,23 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  * - Builtin Led: "2"
  */
 
+#define SENSOR_LIS3DHH 1
+#define SENSOR_MPU6050 2
+
+#define SENSOR SENSOR_MPU6050
+
+#if (SENSOR == SENSOR_LIS3DHH)
 #define CS_PIN 15 // Wemos D1 mini, NodeMCU ESP-12E
+#elif (SENSOR == SENSOR_MPU6050)
+#define SCL_PIN D6
+#define SDA_PIN D7
+#endif
 
 #define INT1_PIN 5
 #define INT2_PIN 4
 
-#define SENSOR_LIS3DHH 0
-#define SENSOR_MPU6050 1
-
-#define SENSOR SENSOR_LIS3DHH
-
-#define OPT_FIFO_EN 1
-#define AUXIL_SENSOR_EN 1
+#define OPT_FIFO_EN 0
+#define AUXIL_SENSOR_EN 0
 
 // Boards Manager URLs:
 // https://dl.espressif.com/dl/package_esp32_index.json (esp32)
@@ -93,11 +98,13 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include <pb.h>
 #include <pb_encode.h>
 
-#include <SPI.h>
 #if (SENSOR == SENSOR_LIS3DHH)
+#include <SPI.h>
 #define private public
 #include <LIS3DHHSensor.h>
 #undef private
+#elif (SENSOR == SENSOR_MPU6050)
+#include <Wire.h>
 #endif
 
 #include "wobble_protocol.pb.h"
@@ -115,6 +122,26 @@ WebSocketsClient webSocket;
 
 #if (SENSOR == SENSOR_LIS3DHH)
 LIS3DHHSensor *sensor;
+#endif
+
+#if (SENSOR == SENSOR_MPU6050)
+
+// MPU6050 Slave Device Address
+const uint8_t MPU6050_SLAVE_ADDRESS = 0x68;
+
+// MPU6050 Configuration Register Addresses
+const uint8_t MPU6050_REGISTER_SMPLRT_DIV   =  0x19;
+const uint8_t MPU6050_REGISTER_USER_CTRL    =  0x6A;
+const uint8_t MPU6050_REGISTER_PWR_MGMT_1   =  0x6B;
+const uint8_t MPU6050_REGISTER_PWR_MGMT_2   =  0x6C;
+const uint8_t MPU6050_REGISTER_CONFIG       =  0x1A;
+const uint8_t MPU6050_REGISTER_GYRO_CONFIG  =  0x1B;
+const uint8_t MPU6050_REGISTER_ACCEL_CONFIG =  0x1C;
+const uint8_t MPU6050_REGISTER_FIFO_EN      =  0x23;
+const uint8_t MPU6050_REGISTER_INT_ENABLE   =  0x38;
+const uint8_t MPU6050_REGISTER_ACCEL_XOUT_H =  0x3B;
+const uint8_t MPU6050_REGISTER_SIGNAL_PATH_RESET = 0x68;
+
 #endif
 
 const unsigned long ntpRefresh = 4 * 60000;
@@ -252,7 +279,7 @@ void setup() {
   // SPI.setFrequency(1000000);
   sensor = new LIS3DHHSensor(&SPI, CS_PIN);
 #elif (SENSOR == SENSOR_MPU6050)
-  // TODO: MPU6050
+  Wire.begin(SDA_PIN, SCL_PIN);
 #endif
 }
 
@@ -364,6 +391,17 @@ void webSocketEvent(WStype_t type, uint8_t *payload, size_t length) {
       break;
   }
 }
+
+#if (SENSOR == SENSOR_MPU6050)
+
+void writeRegister(uint8_t deviceAddress, uint8_t regAddress, uint8_t data){
+  Wire.beginTransmission(deviceAddress);
+  Wire.write(regAddress);
+  Wire.write(data);
+  Wire.endTransmission();
+}
+
+#endif
 
 void accelReset() {
   accelRd = 0;
@@ -525,7 +563,22 @@ void ICACHE_RAM_ATTR accelRead(void *) {
 #if OPT_FIFO_EN
   // TODO: MPU6050
 #else
-  // TODO: MPU6050
+  Wire.beginTransmission(MPU6050_SLAVE_ADDRESS);
+  Wire.write(MPU6050_REGISTER_ACCEL_XOUT_H);
+  Wire.endTransmission();
+  Wire.requestFrom(MPU6050_SLAVE_ADDRESS, (uint8_t)6); // Up to 14 to add temp and gyro
+  int16_t accelX = ((int16_t)Wire.read() << 8) | Wire.read();
+  int16_t accelY = ((int16_t)Wire.read() << 8) | Wire.read();
+  int16_t accelZ = ((int16_t)Wire.read() << 8) | Wire.read();
+  accelPushValue(accelX, accelY, accelZ, 0);
+  if (accelReads % 250 == 0) {
+    if (accelStreamOpen) {
+      digitalWrite(LED_BUILTIN, LOW); // Turn on LED
+    }
+  } else if (accelReads % 250 == 10) {
+    digitalWrite(LED_BUILTIN, HIGH); // Turn off LED
+  }
+  ++accelReads;
 #endif
 #endif
   accelNextTs = nextTs;
@@ -621,6 +674,20 @@ void ICACHE_RAM_ATTR auxilRead(void *) {
   auxilPushValue(buf.i16bit >> 4);
 #elif (SENSOR == SENSOR_MPU6050)
   // TODO: MPU6050
+  /*// read all 14 register
+void Read_RawValue(uint8_t deviceAddress, uint8_t regAddress){
+  Wire.beginTransmission(deviceAddress);
+  Wire.write(regAddress);
+  Wire.endTransmission();
+  Wire.requestFrom(deviceAddress, (uint8_t)14);
+  AccelX = (((int16_t)Wire.read()<<8) | Wire.read());
+  AccelY = (((int16_t)Wire.read()<<8) | Wire.read());
+  AccelZ = (((int16_t)Wire.read()<<8) | Wire.read());
+  Temperature = (((int16_t)Wire.read()<<8) | Wire.read());
+  GyroX = (((int16_t)Wire.read()<<8) | Wire.read());
+  GyroY = (((int16_t)Wire.read()<<8) | Wire.read());
+  GyroZ = (((int16_t)Wire.read()<<8) | Wire.read());
+}*/
   // auxilPushValue(temp, gyroX, gyroY, gyroZ)
 #endif
 }
@@ -904,7 +971,24 @@ void loop() {
     Serial.println("OK!");
     Serial.println();
 #elif (SENSOR == SENSOR_MPU6050)
-    // TODO: MPU6050
+    Serial.println();
+    Serial.print("Sensor...");
+    
+    // TODO: Verify that the sensor is connected!
+    writeRegister(MPU6050_SLAVE_ADDRESS, MPU6050_REGISTER_SMPLRT_DIV, 0x07);
+    writeRegister(MPU6050_SLAVE_ADDRESS, MPU6050_REGISTER_PWR_MGMT_1, 0x01);
+    writeRegister(MPU6050_SLAVE_ADDRESS, MPU6050_REGISTER_PWR_MGMT_2, 0x00);
+    writeRegister(MPU6050_SLAVE_ADDRESS, MPU6050_REGISTER_CONFIG, 0x00);
+    writeRegister(MPU6050_SLAVE_ADDRESS, MPU6050_REGISTER_GYRO_CONFIG, 0x00);//set +/-250 degree/second full scale
+    writeRegister(MPU6050_SLAVE_ADDRESS, MPU6050_REGISTER_ACCEL_CONFIG, 0x00);// set +/- 2g full scale
+    writeRegister(MPU6050_SLAVE_ADDRESS, MPU6050_REGISTER_FIFO_EN, 0x00); // TODO: FIFO
+    writeRegister(MPU6050_SLAVE_ADDRESS, MPU6050_REGISTER_INT_ENABLE, 0x01);
+    writeRegister(MPU6050_SLAVE_ADDRESS, MPU6050_REGISTER_SIGNAL_PATH_RESET, 0x00);
+    writeRegister(MPU6050_SLAVE_ADDRESS, MPU6050_REGISTER_USER_CTRL, 0x00);
+
+    // OK!
+    Serial.println("OK!");
+    Serial.println();
 #endif
     sensorChecked = true;
     accelRead(NULL); // Quick first read
@@ -957,7 +1041,7 @@ void loop() {
 
     Serial.println();
 #elif (SENSOR == SENSOR_MPU6050)
-    // TODO: MPY6050
+    // TODO: MPU6050
 #endif
     accelFifoOverflow = false;
   }
@@ -1141,15 +1225,15 @@ void loop() {
         Serial.println(PriUint64<DEC>(timestamp));
         messages.openStream = (OpenStream)OpenStream_init_zero;
         messages.openStream.message_type = MessageType_OPEN_STREAM;
-        strcpy(messages.openStream.password, auxilPassword);
+        strcpy(messages.openStream.password, tempPassword);
         messages.openStream.has_info = true;
-        strcpy(messages.openStream.info.name, auxilName);
+        strcpy(messages.openStream.info.name, tempName);
         messages.openStream.alias = auxilStreamAlias;
         messages.openStream.info.channels = 1;
         messages.openStream.info.frequency = 50;
         messages.openStream.info.bits = 12;
         messages.openStream.info.timestamp = timestamp; // The timestamp that was set when the sensor fifo was cleared, so the timestamp of the first sample
-        strcpy(messages.openStream.info.description, auxilDescription);
+        strcpy(messages.openStream.info.description, tempDescription);
         messages.openStream.info.channel_descriptions_count = 1;
         strcpy(messages.openStream.info.channel_descriptions[0], "Sensor");
         messages.openStream.info.timestamp_precision = 1000000; // 1s

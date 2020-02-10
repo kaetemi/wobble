@@ -6,12 +6,16 @@ const char *serverAddress = "wobble";
 const int serverPort      = 8090;
 
 const double latitude        = 14.14141;
-const double longitude       = 121.21212
+const double longitude       = 121.21212;
 
-const char *accelName        = "owner_identifier_accel";
-const char *accelPassword    = "password";
-const char *accelDescription = "Display Name";
+const char *accelName           = "owner_identifier_accel";
+const char *accelPassword       = "password";
+const char *accelDescription    = "Display Name";
 
-const char *tempName         = "owner_identifier_temp";
-const char *tempPassword     = "password";
-const char *tempDescription  = "Display Name";
+const char *tempName           = "owner_identifier_temp";
+const char *tempPassword       = "password";
+const char *tempDescription    = "Display Name";
+
+const char *gyroName           = "owner_identifier_gyro";
+const char *gyroPassword       = "password";
+const char *gyroDescription    = "Display Name";
