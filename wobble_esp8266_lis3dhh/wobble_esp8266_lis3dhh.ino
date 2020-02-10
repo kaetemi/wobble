@@ -621,7 +621,7 @@ void ICACHE_RAM_ATTR auxilPushValue(int16_t temp, int16_t gyroX, int16_t gyroY, 
   auxil[wr] = temp;
 #elif (SENSOR == SENSOR_MPU6050)
   auxilTemp[wr] = temp;
-  auxilGyroXoX[wr] = gyroX;
+  auxilGyroX[wr] = gyroX;
   auxilGyroY[wr] = gyroY;
   auxilGyroZ[wr] = gyroZ;
 #endif
