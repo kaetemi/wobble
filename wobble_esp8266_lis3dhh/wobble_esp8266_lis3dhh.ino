@@ -711,6 +711,7 @@ void loop() {
     clockUp();
     // Serial.println(WiFi.status()); // 5 = WL_CONNECTION_LOST, 255 = WL_NO_SHIELD
     printWiFiStatus();
+    WiFi.mode(WIFI_STA); // Disable AP
     Serial.print("Connecting to ");
     Serial.println(ssid);
 
