@@ -35,7 +35,13 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #define INT1_PIN 5
 #define INT2_PIN 4
 
-#define LIS_TEMP_SENSOR_EN 1
+#define SENSOR_LIS3DHH 0
+#define SENSOR_MPU6050 1
+
+#define SENSOR SENSOR_LIS3DHH
+
+#define OPT_FIFO_EN 1
+#define AUXIL_SENSOR_EN 1
 
 // Boards Manager URLs:
 // https://dl.espressif.com/dl/package_esp32_index.json (esp32)
@@ -88,9 +94,11 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include <pb_encode.h>
 
 #include <SPI.h>
+#if (SENSOR == SENSOR_LIS3DHH)
 #define private public
 #include <LIS3DHHSensor.h>
 #undef private
+#endif
 
 #include "wobble_protocol.pb.h"
 #include "wifi_setup.h"
@@ -105,7 +113,9 @@ NTPClient timeClient(ntpUDP); // ntpUDP, "europe.pool.ntp.org", 3600, 60000
 
 WebSocketsClient webSocket;
 
+#if (SENSOR == SENSOR_LIS3DHH)
 LIS3DHHSensor *sensor;
+#endif
 
 const unsigned long ntpRefresh = 4 * 60000;
 unsigned long ntpLast = 0;
@@ -134,7 +144,11 @@ bool sensorChecked = false;
 
 #define ACCEL_BUFFER_SZ 4096
 #define ACCEL_BUFFER_MASK (ACCEL_BUFFER_SZ - 1)
+#if (SENSOR == SENSOR_LIS3DHH)
 #define ACCEL_SAMPLE_BLOCK 55
+#elif (SENSOR == SENSOR_MPU6050)
+#define ACCEL_SAMPLE_BLOCK 50
+#endif
 const int accelStreamAlias = 2;
 bool accelStreamOpen = false;
 bool accelStreamProblem = false;
@@ -146,22 +160,43 @@ int64_t accelRefTs = 0, accelNextTs = 0;
 int32_t accelRefReads = 0, accelNextReads = 0;
 int32_t accelReads = 0;
 int32_t accelSamplesSent = 0;
+#if (SENSOR == SENSOR_LIS3DHH)
 int32_t accelFreq = 1100; // auto adjust by drift
+#elif (SENSOR == SENSOR_MPU6050)
+#if OPT_FIFO_EN
+int32_t accelFreq = 1000; // auto adjust by drift
+#else
+int32_t accelFreq = 250; // auto adjust by drift
+#endif
+#endif
 int64_t accelOpenTs = 0;
 int32_t accelOpenReads = 0;
 os_timer_t accelTimer;
 
-#if LIS_TEMP_SENSOR_EN
-#define LIS_TEMP_BUFFER_SZ 512
-#define LIS_TEMP_BUFFER_MASK (LIS_TEMP_BUFFER_SZ - 1)
-#define LIS_TEMP_SAMPLE_BLOCK 25
-#define LIS_TEMP_TIMER_INTERVAL (1000 / 50)
-const int lisTempStreamAlias = 3;
-bool lisTempStreamOpen = false;
-bool lisTempStreamProblem = false;
-int16_t lisTemp[LIS_TEMP_BUFFER_SZ];
-int64_t lisTempRd = 0, lisTempWr = 0;
-os_timer_t lisTempTimer;
+#if AUXIL_SENSOR_EN
+#if (SENSOR == SENSOR_LIS3DHH)
+// 50 samples per second, send twice a second, 10 seconds buffer
+#define AUXIL_BUFFER_SZ 512
+#define AUXIL_SAMPLE_BLOCK 25
+#define AUXIL_TIMER_INTERVAL (1000 / 50)
+#elif (SENSOR == SENSOR_MPU6050)
+// 10 samples per second, four buffers, send once a second, 10 seconds buffer
+#define AUXIL_BUFFER_SZ 128
+#define AUXIL_SAMPLE_BLOCK 10
+#define AUXIL_TIMER_INTERVAL (1000 / 10)
+#endif
+#define AUXIL_BUFFER_MASK (AUXIL_BUFFER_SZ - 1)
+const int auxilStreamAlias = 3;
+bool auxilStreamOpen = false;
+bool auxilStreamProblem = false;
+#if (SENSOR == SENSOR_LIS3DHH)
+int16_t auxil[AUXIL_BUFFER_SZ];
+#elif (SENSOR == SENSOR_MPU6050)
+int16_t auxilTemp[AUXIL_BUFFER_SZ];
+int16_t auxilGyroX[AUXIL_BUFFER_SZ], auxilGyroY[AUXIL_BUFFER_SZ], auxilGyroZ[AUXIL_BUFFER_SZ];
+#endif
+int64_t auxilRd = 0, auxilWr = 0;
+os_timer_t auxilTimer;
 #endif
 
 void delaySafe(int32_t maxTimeout = 1000) {
@@ -211,10 +246,14 @@ void setup() {
   
   pinMode(LED_BUILTIN, OUTPUT);
   digitalWrite(LED_BUILTIN, LOW); // Turn on LED
-  
+
+#if (SENSOR == SENSOR_LIS3DHH)
   SPI.begin();
   // SPI.setFrequency(1000000);
   sensor = new LIS3DHHSensor(&SPI, CS_PIN);
+#elif (SENSOR == SENSOR_MPU6050)
+  // TODO: MPU6050
+#endif
 }
 
 void clockDown() {
@@ -449,6 +488,7 @@ bool accelBackoutRead(int count) {
 void ICACHE_RAM_ATTR accelRead(void *) {
   int64_t nextTs = currentTimestamp();
   int32_t nextReads = accelReads;
+#if (SENSOR == SENSOR_LIS3DHH)
   LIS3DHHStatusTypeDef res;
   lis3dhh_reg_t reg;
   reg.byte = 0;
@@ -481,74 +521,108 @@ void ICACHE_RAM_ATTR accelRead(void *) {
         return;
       }
   }
+#elif (SENSOR == SENSOR_MPU6050)
+#if OPT_FIFO_EN
+  // TODO: MPU6050
+#else
+  // TODO: MPU6050
+#endif
+#endif
   accelNextTs = nextTs;
   accelNextReads = nextReads;
 }
 
-#if LIS_TEMP_SENSOR_EN
-void lisTempReset() {
-  lisTempRd = 0;
-  lisTempWr = 0;
+#if AUXIL_SENSOR_EN
+void auxilReset() {
+  auxilRd = 0;
+  auxilWr = 0;
 }
 
-bool lisTempOpenOrPublish(int count) {
-  if (lisTempStreamProblem) return false;
-  int16_t rd = lisTempRd, wr = lisTempWr;
-  int16_t space = (LIS_TEMP_BUFFER_SZ - wr + rd - 1) & LIS_TEMP_BUFFER_MASK;
-  int16_t written = LIS_TEMP_BUFFER_SZ - space;
-  if (lisTempStreamOpen) {
+bool auxilOpenOrPublish(int count) {
+  if (auxilStreamProblem) return false;
+  int16_t rd = auxilRd, wr = auxilWr;
+  int16_t space = (AUXIL_BUFFER_SZ - wr + rd - 1) & AUXIL_BUFFER_MASK;
+  int16_t written = AUXIL_BUFFER_SZ - space;
+  if (auxilStreamOpen) {
     return written >= count;
   } else {
     return written > 0;
   }
 }
 
-void ICACHE_RAM_ATTR lisTempPushValue(int16_t temp) {
-  if (lisTempStreamProblem) return;
-  int16_t rd = lisTempRd, wr = lisTempWr;
-  int16_t space = (LIS_TEMP_BUFFER_SZ - wr + rd - 1) & LIS_TEMP_BUFFER_MASK;
+#if (SENSOR == SENSOR_LIS3DHH)
+void ICACHE_RAM_ATTR auxilPushValue(int16_t temp) {
+#elif (SENSOR == SENSOR_MPU6050)
+void ICACHE_RAM_ATTR auxilPushValue(int16_t temp, int16_t gyroX, int16_t gyroY, int16_t gyroZ) {
+#endif
+  if (auxilStreamProblem) return;
+  int16_t rd = auxilRd, wr = auxilWr;
+  int16_t space = (AUXIL_BUFFER_SZ - wr + rd - 1) & AUXIL_BUFFER_MASK;
   if (!space) {
     Serial.println("Temperature buffer out of space");
-    lisTempStreamProblem = true;
+    auxilStreamProblem = true;
     // System will restart stream & clear buffer
     return;
   }
-  lisTemp[wr] = temp;
-  lisTempWr = (wr + 1) & LIS_TEMP_BUFFER_MASK;
+#if (SENSOR == SENSOR_LIS3DHH)
+  auxil[wr] = temp;
+#elif (SENSOR == SENSOR_MPU6050)
+  auxilTemp[wr] = temp;
+  auxilGyroXoX[wr] = gyroX;
+  auxilGyroY[wr] = gyroY;
+  auxilGyroZ[wr] = gyroZ;
+#endif
+  auxilWr = (wr + 1) & AUXIL_BUFFER_MASK;
 }
 
-bool ICACHE_RAM_ATTR lisTempReadValues(int32_t *temp, int count, int64_t *timestamp = NULL) {
-  if (lisTempStreamProblem) return false;
-  int16_t rd = lisTempRd, wr = lisTempWr;
-  int16_t space = (LIS_TEMP_BUFFER_SZ - wr + rd - 1) & LIS_TEMP_BUFFER_MASK;
-  int16_t written = LIS_TEMP_BUFFER_SZ - space;
+#if (SENSOR == SENSOR_LIS3DHH)
+bool ICACHE_RAM_ATTR auxilReadValues(int32_t *temp, int count, int64_t *timestamp = NULL) {
+#elif (SENSOR == SENSOR_MPU6050)
+bool ICACHE_RAM_ATTR auxilReadValues(int32_t *temp, int32_t *gyroX, int32_t *gyroY, int32_t *gyroZ, int count, int64_t *timestamp = NULL) {
+#endif
+  if (auxilStreamProblem) return false;
+  int16_t rd = auxilRd, wr = auxilWr;
+  int16_t space = (AUXIL_BUFFER_SZ - wr + rd - 1) & AUXIL_BUFFER_MASK;
+  int16_t written = AUXIL_BUFFER_SZ - space;
   if (timestamp && written > 0) {
     // Timestamping for temperature should match system clock, since it's sampled by the timer
     // Temperature sampling may have aliasing due to not matching the native sampling rate
     // Simply calculate the past timestamp
-    *timestamp = currentTimestamp() - (LIS_TEMP_TIMER_INTERVAL * 1000 * written);
+    *timestamp = currentTimestamp() - (AUXIL_TIMER_INTERVAL * 1000 * written);
   }
   if (count >= written) {
     // Don't have enough values currently
     return false;
   }
   for (int i = 0; i < count; ++i) {
-    int rdi = (rd + i) & LIS_TEMP_BUFFER_MASK;
-    temp[i] = lisTemp[rdi];
+    int rdi = (rd + i) & AUXIL_BUFFER_MASK;
+#if (SENSOR == SENSOR_LIS3DHH)
+    temp[i] = auxil[rdi];
+#elif (SENSOR == SENSOR_MPU6050)
+    temp[i] = auxilTemp[rdi];
+    gyroX[i] = auxilGyroX[rdi];
+    gyroY[i] = auxilGyroY[rdi];
+    gyroZ[i] = auxilGyroZ[rdi];
+#endif
   }
-  lisTempRd = (rd + count) & LIS_TEMP_BUFFER_MASK;
+  auxilRd = (rd + count) & AUXIL_BUFFER_MASK;
   return true;
 }
 
-void ICACHE_RAM_ATTR lisTempRead(void *) {
+void ICACHE_RAM_ATTR auxilRead(void *) {
+#if (SENSOR == SENSOR_LIS3DHH)
   int32_t res;
   axis1bit16_t buf;
   res = lis3dhh_temperature_raw_get(&sensor->reg_ctx, buf.u8bit);
   if (res) {
-    lisTempStreamProblem = true;
+    auxilStreamProblem = true;
     return;
   }
-  lisTempPushValue(buf.i16bit >> 4);
+  auxilPushValue(buf.i16bit >> 4);
+#elif (SENSOR == SENSOR_MPU6050)
+  // TODO: MPU6050
+  // auxilPushValue(temp, gyroX, gyroY, gyroZ)
+#endif
 }
 #endif
 
@@ -670,9 +744,9 @@ void loop() {
       Serial.print("Drift: ");
       Serial.println(PriUint64<DEC>(timestampDrift));
       timeReady = false;
-#if LIS_TEMP_SENSOR_EN
+#if AUXIL_SENSOR_EN
       // Close temperature stream, since it follows the system clock
-      lisTempStreamProblem = true;
+      auxilStreamProblem = true;
 #endif
       return;
     }
@@ -707,11 +781,11 @@ void loop() {
         accelReset();
       }
     }
-#if LIS_TEMP_SENSOR_EN
-    if (lisTempStreamOpen) {
-      lisTempStreamOpen = false;
+#if AUXIL_SENSOR_EN
+    if (auxilStreamOpen) {
+      auxilStreamOpen = false;
       if (sensorChecked) {
-        lisTempReset();
+        auxilReset();
       }
     }
 #endif
@@ -738,9 +812,10 @@ void loop() {
 
   // Check sensor
   if (!sensorChecked) {
-    LIS3DHHStatusTypeDef res;
     clockUp();
     digitalWrite(LED_BUILTIN, HIGH); // Turn off LED
+#if (SENSOR == SENSOR_LIS3DHH)
+    LIS3DHHStatusTypeDef res;
 
     // Check ID
     Serial.println();
@@ -817,9 +892,9 @@ void loop() {
     // Interrupt with SPI not working reliably
     // Regular call not reliable either due to WiFi!
     
-#if LIS_TEMP_SENSOR_EN
-    os_timer_setfn(&lisTempTimer, lisTempRead, NULL);
-    os_timer_arm(&lisTempTimer, LIS_TEMP_TIMER_INTERVAL, true);
+#if AUXIL_SENSOR_EN
+    os_timer_setfn(&auxilTimer, auxilRead, NULL);
+    os_timer_arm(&auxilTimer, AUXIL_TIMER_INTERVAL, true);
 #endif
     
     res = sensor->Enable_X();
@@ -828,7 +903,10 @@ void loop() {
     // OK!
     Serial.println("OK!");
     Serial.println();
-    sensorChecked = true; // After this, only access sensor from interrupt!
+#elif (SENSOR == SENSOR_MPU6050)
+    // TODO: MPU6050
+#endif
+    sensorChecked = true;
     accelRead(NULL); // Quick first read
   }
   bool wsSent = false;
@@ -836,6 +914,7 @@ void loop() {
   if (accelFifoOverflow) {
     clockUp();
     accelReset();
+#if (SENSOR == SENSOR_LIS3DHH)
     Serial.println();
     Serial.println("Restart accelerometer FIFO");
     LIS3DHHStatusTypeDef res;
@@ -877,6 +956,9 @@ void loop() {
     }
 
     Serial.println();
+#elif (SENSOR == SENSOR_MPU6050)
+    // TODO: MPY6050
+#endif
     accelFifoOverflow = false;
   }
 
@@ -935,14 +1017,21 @@ void loop() {
         strcpy(messages.openStream.info.channel_descriptions[2], "Z");
         messages.openStream.info.timestamp_precision = 1000000; // 1s
         messages.openStream.info.sensor = SensorType_ACCELEROMETER;
-        strcpy(messages.openStream.info.hardware, "LIS3DHH");
-        messages.openStream.info.unit = Unit_G;
-        messages.openStream.info.scale = 2.5f;
-        messages.openStream.info.zoom = 32.0f;
         messages.openStream.info.center_count = 3;
         messages.openStream.info.center[0] = 0;
         messages.openStream.info.center[1] = 0;
+#if (SENSOR == SENSOR_LIS3DHH)
+        strcpy(messages.openStream.info.hardware, "LIS3DHH");
+        messages.openStream.info.scale = 2.5f;
+        messages.openStream.info.zoom = 32.0f;
         messages.openStream.info.center[2] = 13107; // 1g
+#elif (SENSOR == SENSOR_MPU6050)
+        strcpy(messages.openStream.info.hardware, "MPU6050");
+        messages.openStream.info.scale = 2.0f;
+        messages.openStream.info.zoom = 40.0f;
+        messages.openStream.info.center[2] = 16384; // 1g
+#endif
+        messages.openStream.info.unit = Unit_G;
         messages.openStream.info.latitude = latitude;
         messages.openStream.info.longitude = longitude;
         pb_ostream_t stream = pb_ostream_from_buffer(buffers.frame.any, sizeof(buffers));
@@ -1017,16 +1106,16 @@ void loop() {
     }
   }
 
-#if LIS_TEMP_SENSOR_EN
+#if AUXIL_SENSOR_EN
   // Routine to stream temperature samples
-  if (lisTempStreamProblem) {
+  if (auxilStreamProblem) {
     clockUp();
-    lisTempReset();
-    if (lisTempStreamOpen) {
+    auxilReset();
+    if (auxilStreamOpen) {
       Serial.println("Close temperature stream");
       messages.closeStream = (CloseStream)CloseStream_init_zero;
       messages.closeStream.message_type = MessageType_CLOSE_STREAM;
-      messages.closeStream.alias = lisTempStreamAlias;
+      messages.closeStream.alias = auxilStreamAlias;
       pb_ostream_t stream = pb_ostream_from_buffer(buffers.frame.any, sizeof(buffers));
       if (!pb_encode(&stream, CloseStream_fields, &messages.closeStream)) {
         Serial.println("Failed to encode CloseStream");
@@ -1039,28 +1128,28 @@ void loop() {
         return;
       }
       wsSent = true;
-      lisTempStreamOpen = false;
+      auxilStreamOpen = false;
     }
-    lisTempStreamProblem = false;
+    auxilStreamProblem = false;
   }
-  if (!wsSent && lisTempOpenOrPublish(LIS_TEMP_SAMPLE_BLOCK)) {
+  if (!wsSent && auxilOpenOrPublish(AUXIL_SAMPLE_BLOCK)) {
     clockUp();
-    if (!lisTempStreamOpen) {
+    if (!auxilStreamOpen) {
       int64_t timestamp;
-      if (lisTempReadValues(NULL,  0, &timestamp)) {
+      if (auxilReadValues(NULL,  0, &timestamp)) {
         Serial.print("Open temperature stream at ");
         Serial.println(PriUint64<DEC>(timestamp));
         messages.openStream = (OpenStream)OpenStream_init_zero;
         messages.openStream.message_type = MessageType_OPEN_STREAM;
-        strcpy(messages.openStream.password, lisTempPassword);
+        strcpy(messages.openStream.password, auxilPassword);
         messages.openStream.has_info = true;
-        strcpy(messages.openStream.info.name, lisTempName);
-        messages.openStream.alias = lisTempStreamAlias;
+        strcpy(messages.openStream.info.name, auxilName);
+        messages.openStream.alias = auxilStreamAlias;
         messages.openStream.info.channels = 1;
         messages.openStream.info.frequency = 50;
         messages.openStream.info.bits = 12;
         messages.openStream.info.timestamp = timestamp; // The timestamp that was set when the sensor fifo was cleared, so the timestamp of the first sample
-        strcpy(messages.openStream.info.description, lisTempDescription);
+        strcpy(messages.openStream.info.description, auxilDescription);
         messages.openStream.info.channel_descriptions_count = 1;
         strcpy(messages.openStream.info.channel_descriptions[0], "Sensor");
         messages.openStream.info.timestamp_precision = 1000000; // 1s
@@ -1085,29 +1174,29 @@ void loop() {
           return;
         }
         wsSent = true;
-        lisTempStreamOpen = true;
-        lisTempStreamProblem = false;
+        auxilStreamOpen = true;
+        auxilStreamProblem = false;
       }
     }
-    if (lisTempStreamOpen) {
+    if (auxilStreamOpen) {
       messages.writeFrame = (WriteFrame)WriteFrame_init_zero;
-      if (lisTempReadValues(
+      if (auxilReadValues(
           messages.writeFrame.channels[0].data,
-          LIS_TEMP_SAMPLE_BLOCK, NULL)) {
+          AUXIL_SAMPLE_BLOCK, NULL)) {
         messages.writeFrame.message_type = MessageType_WRITE_FRAME;
-        messages.writeFrame.alias = lisTempStreamAlias;
+        messages.writeFrame.alias = auxilStreamAlias;
         messages.writeFrame.channels_count = 1;
-        messages.writeFrame.channels[0].data_count = LIS_TEMP_SAMPLE_BLOCK;
+        messages.writeFrame.channels[0].data_count = AUXIL_SAMPLE_BLOCK;
         pb_ostream_t stream = pb_ostream_from_buffer(buffers.frame.any, sizeof(buffers));
         if (!pb_encode(&stream, WriteFrame_fields, &messages.writeFrame)) {
           Serial.println("Failed to encode WriteFrame");
-          lisTempStreamProblem = true;
+          auxilStreamProblem = true;
           delaySafe();
           return;
         }
         if (!webSocket.sendBIN(buffers.hdr, stream.bytes_written, true)) {
           Serial.println("Failed to send WriteFrame");
-          lisTempStreamProblem = true;
+          auxilStreamProblem = true;
           delaySafe();
           return;
         }
