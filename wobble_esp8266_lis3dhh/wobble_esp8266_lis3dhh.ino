@@ -986,6 +986,9 @@ void loop() {
     writeRegister(MPU6050_SLAVE_ADDRESS, MPU6050_REGISTER_INT_ENABLE, 0x01);
     writeRegister(MPU6050_SLAVE_ADDRESS, MPU6050_REGISTER_SIGNAL_PATH_RESET, 0x00);
     writeRegister(MPU6050_SLAVE_ADDRESS, MPU6050_REGISTER_USER_CTRL, 0x00);
+    
+    os_timer_setfn(&accelTimer, accelRead, NULL);
+    os_timer_arm(&accelTimer, 4, true);
 
     // OK!
     Serial.println("OK!");
@@ -1113,7 +1116,7 @@ void loop() {
 #elif (SENSOR == SENSOR_MPU6050)
         strcpy(messages.openStream.info.hardware, "MPU6050");
         messages.openStream.info.scale = 2.0f;
-        messages.openStream.info.zoom = 40.0f;
+        messages.openStream.info.zoom = 25.6f;
         messages.openStream.info.center[2] = 16384; // 1g
 #endif
         messages.openStream.info.unit = Unit_G;
